@@ -4,8 +4,10 @@
 
 (() => {
   const D = window.TQ_DATA;
+  const C = window.TQ_COLLECTION;
+
   const SAVE_KEY = 'towerquest.pages.save.v1';
-  const MIGRATION_BACKUP_KEY = 'towerquest.pages.before-100-stage.backup';
+  const BACKUP_KEY = 'towerquest.pages.before-collection.backup';
   const SCHEMA_VERSION = 3;
 
   const $ = (id) => document.getElementById(id);
@@ -23,6 +25,7 @@
   let enemies = new Map();
   let skills = new Map();
 
+  const fxQueue = [];
   const referenceCache = new Map();
   const backgroundCache = new Map();
   let backgroundToken = 0;
@@ -66,15 +69,13 @@
   }
 
   function rankDefinition(rank) {
-    const definition = D.rankDefinitions.find((item) => {
-      return item.rank === rank;
-    });
+    const result = D.rankDefinitions.find((item) => item.rank === rank);
 
-    if (!definition) {
+    if (!result) {
       throw new Error('ランク定義がありません。');
     }
 
-    return definition;
+    return result;
   }
 
   function skillFor(id, rank) {
@@ -150,7 +151,6 @@
     return info.floor + '-' + info.stage;
   }
 
-  // エリアのfrom/toは通算ステージ番号。
   function areaFor(index) {
     const area = D.areas.find((item) => {
       return index >= item.from && index <= item.to;
@@ -165,17 +165,22 @@
 
   function stats(member) {
     const definition = characters.get(member.id);
+
+    if (!definition) {
+      throw new Error('キャラクター定義がありません。');
+    }
+
     const multiplier = rankDefinition(member.rank).statMultiplier;
-    const value = {};
+    const result = {};
 
     for (const key of ['hp', 'atk', 'def']) {
-      value[key] = (
+      result[key] = (
         definition.base[key] +
         definition.growth[key] * (member.level - 1)
       ) * multiplier;
     }
 
-    return value;
+    return result;
   }
 
   function neededExp(level) {
@@ -228,44 +233,41 @@
     }
   }
 
- // File: game.js
-
-function freshSave() {
-  const base = {
-    game: 'towerquest-pages',
-    schemaVersion: SCHEMA_VERSION,
-    revision: 0,
-    coins: 0,
-    highestCleared: 0,
-    selectedStage: 1,
-    party: D.initialParty.map((id) => ({
-      id,
-      level: 1,
-      rank: 1,
-      exp: 0
-    })),
-    battle: null,
-    updatedAt: new Date().toISOString()
-  };
-
-  return window.TQ_COLLECTION.hydrate(base);
-}
+  function freshSave() {
+    return C.hydrate({
+      game: 'towerquest-pages',
+      schemaVersion: SCHEMA_VERSION,
+      revision: 0,
+      coins: 0,
+      highestCleared: 0,
+      selectedStage: 1,
+      party: D.initialParty.map((id) => ({
+        id,
+        level: 1,
+        rank: 1,
+        exp: 0
+      })),
+      battle: null,
+      updatedAt: new Date().toISOString()
+    });
+  }
 
   function validateParty(raw, oldRanks) {
     if (!Array.isArray(raw) || raw.length !== 4) {
       throw new Error('パーティは4人必要です。');
     }
 
-    const ids = new Set();
+    const seen = new Set();
 
     return raw.map((member) => {
-      if (!member || !characters.has(member.id) || ids.has(member.id)) {
+      if (!member || !characters.has(member.id) || seen.has(member.id)) {
         throw new Error('パーティのキャラクターが不正です。');
       }
 
-      ids.add(member.id);
+      seen.add(member.id);
 
       const level = integer(member.level, 1, D.rules.maxLevel, 'レベル');
+
       let rank = integer(
         member.rank,
         1,
@@ -296,19 +298,21 @@ function freshSave() {
   }
 
   function effectValues(type, property) {
-    const values = [type === 'cover' ? 0 : 1];
+    const result = [type === 'cover' ? 0 : 1];
 
     for (const skill of D.skills) {
-      if (skill.type === type) {
-        for (const variant of skill.variants) {
-          if (variant[property] !== undefined) {
-            values.push(variant[property]);
-          }
+      if (skill.type !== type) {
+        continue;
+      }
+
+      for (const variant of skill.variants) {
+        if (variant[property] !== undefined) {
+          result.push(variant[property]);
         }
       }
     }
 
-    return values;
+    return result;
   }
 
   function validateBattle(raw, party, cleared) {
@@ -321,6 +325,7 @@ function freshSave() {
     }
 
     const index = integer(raw.index, 1, maxStage, '戦闘ステージ');
+
     integer(raw.round, 1, 1000000, 'ラウンド');
     integer(raw.actor, 0, 3, '行動者');
 
@@ -350,6 +355,7 @@ function freshSave() {
       round: raw.round,
       actor: raw.actor,
       rewards: null,
+      blessing: null,
       log: Array.isArray(raw.log)
         ? raw.log.slice(-40).map((line) => String(line).slice(0, 300))
         : [],
@@ -362,7 +368,7 @@ function freshSave() {
       const definition = characters.get(member.id);
 
       if (!ally || ally.id !== member.id || ally.rank !== member.rank) {
-        throw new Error('戦闘中のパーティが不正です。');
+        throw new Error('戦闘中のパーティが一致しません。');
       }
 
       integer(ally.maxHp, 1, 1000000000, '最大HP');
@@ -461,126 +467,49 @@ function freshSave() {
       };
     }
 
+    if (
+      raw.blessing &&
+      typeof raw.blessing.name === 'string' &&
+      typeof raw.blessing.text === 'string'
+    ) {
+      battle.blessing = {
+        name: raw.blessing.name.slice(0, 80),
+        text: raw.blessing.text.slice(0, 160)
+      };
+    }
+
     return battle;
   }
 
-  // File: game.js
+  function normalizeSave(raw) {
+    if (!raw || typeof raw !== 'object') {
+      throw new Error('セーブデータが不正です。');
+    }
 
-function normalizeSave(raw) {
-  if (!raw || typeof raw !== 'object') {
-    throw new Error('セーブデータが不正です。');
-  }
+    const gas = raw.game !== 'towerquest-pages' &&
+      Array.isArray(raw.party) &&
+      raw.clearedFloor !== undefined;
 
-  const gas = raw.game !== 'towerquest-pages' &&
-    Array.isArray(raw.party) &&
-    raw.clearedFloor !== undefined;
+    const pages = raw.game === 'towerquest-pages' &&
+      [1, 2, 3].includes(raw.schemaVersion);
 
-  const pages = raw.game === 'towerquest-pages' &&
-    [1, 2, 3].includes(raw.schemaVersion);
+    if (!gas && !pages) {
+      throw new Error('対応していないセーブ形式です。');
+    }
 
-  if (!gas && !pages) {
-    throw new Error('対応していないセーブ形式です。');
-  }
+    const migrated = gas || raw.schemaVersion !== SCHEMA_VERSION;
+    const oldRanks = gas || raw.schemaVersion === 1;
+    const party = validateParty(raw.party, oldRanks);
 
-  const migrated = gas || raw.schemaVersion !== SCHEMA_VERSION;
-  const oldRanks = gas || raw.schemaVersion === 1;
-  const party = validateParty(raw.party, oldRanks);
-
-  let originalCleared;
-
-  if (gas) {
-    originalCleared =
-      integer(raw.clearedFloor, 0, 100, '旧突破階層') *
-      D.rules.stagesPerFloor;
-  } else {
-    originalCleared = integer(
-      raw.highestCleared,
-      0,
-      migrated ? 1000 : maxStage,
-      '突破ステージ'
-    );
-  }
-
-  const cleared = Math.min(originalCleared, maxStage);
-
-  const selected = migrated
-    ? Math.min(cleared + 1, maxStage)
-    : integer(
-        raw.selectedStage,
-        1,
-        maxStage,
-        '選択ステージ'
-      );
-
-  if (selected > Math.min(cleared + 1, maxStage)) {
-    throw new Error('選択ステージが未解放です。');
-  }
-
-  const base = {
-    game: 'towerquest-pages',
-    schemaVersion: SCHEMA_VERSION,
-    revision: gas
-      ? 0
+    const originalCleared = gas
+      ? integer(raw.clearedFloor, 0, 100, '旧突破階層') *
+        D.rules.stagesPerFloor
       : integer(
-          raw.revision ?? 0,
+          raw.highestCleared,
           0,
-          Number.MAX_SAFE_INTEGER,
-          '保存番号'
-        ),
-    coins: integer(
-      raw.coins,
-      0,
-      Number.MAX_SAFE_INTEGER,
-      'コイン'
-    ),
-    highestCleared: cleared,
-    selectedStage: selected,
-    party,
-    battle: null,
-    updatedAt: new Date().toISOString()
-  };
-
-  // 旧ランクのセーブは、変換済みpartyから所持情報を作成する。
-  const collectionSource = oldRanks
-    ? base
-    : raw;
-
-  const value = window.TQ_COLLECTION.hydrate(
-    base,
-    collectionSource
-  );
-
-  const battleReset = !!raw.battle &&
-    (migrated || raw.battle.version !== D.battleVersion);
-
-  value.battle = migrated
-    ? null
-    : validateBattle(
-        raw.battle,
-        value.party,
-        cleared
-      );
-
-  // 加護表示用の戦闘開始時スナップショット。
-  if (
-    value.battle &&
-    raw.battle.blessing &&
-    typeof raw.battle.blessing.name === 'string' &&
-    typeof raw.battle.blessing.text === 'string'
-  ) {
-    value.battle.blessing = {
-      name: raw.battle.blessing.name.slice(0, 80),
-      text: raw.battle.blessing.text.slice(0, 160)
-    };
-  }
-
-  return {
-    migrated,
-    battleReset,
-    capped: originalCleared > maxStage,
-    value
-  };
-}
+          migrated ? 1000 : maxStage,
+          '突破ステージ'
+        );
 
     const cleared = Math.min(originalCleared, maxStage);
 
@@ -592,32 +521,40 @@ function normalizeSave(raw) {
       throw new Error('選択ステージが未解放です。');
     }
 
+    const base = {
+      game: 'towerquest-pages',
+      schemaVersion: SCHEMA_VERSION,
+      revision: gas
+        ? 0
+        : integer(raw.revision ?? 0, 0, Number.MAX_SAFE_INTEGER, '保存番号'),
+      coins: integer(raw.coins, 0, Number.MAX_SAFE_INTEGER, 'コイン'),
+      highestCleared: cleared,
+      selectedStage: selected,
+      party,
+      battle: null,
+      updatedAt: new Date().toISOString()
+    };
+
+    const value = C.hydrate(base, oldRanks ? base : raw);
+
     const battleReset = !!raw.battle &&
       (migrated || raw.battle.version !== D.battleVersion);
 
+    value.battle = migrated
+      ? null
+      : validateBattle(raw.battle, value.party, cleared);
+
     return {
       migrated,
+      collectionMigrated: raw.collectionVersion === undefined,
       battleReset,
       capped: originalCleared > maxStage,
-      value: {
-        game: 'towerquest-pages',
-        schemaVersion: SCHEMA_VERSION,
-        revision: gas
-          ? 0
-          : integer(raw.revision ?? 0, 0, Number.MAX_SAFE_INTEGER, '保存番号'),
-        coins: integer(raw.coins, 0, Number.MAX_SAFE_INTEGER, 'コイン'),
-        highestCleared: cleared,
-        selectedStage: selected,
-        party,
-        battle: migrated
-          ? null
-          : validateBattle(raw.battle, party, cleared),
-        updatedAt: new Date().toISOString()
-      }
+      value
     };
   }
 
   function persist() {
+    C.syncParty(save);
     save.updatedAt = new Date().toISOString();
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   }
@@ -625,28 +562,31 @@ function normalizeSave(raw) {
   function validateMaster() {
     if (
       !D ||
+      !C ||
       !D.rules ||
       !Array.isArray(D.characters) ||
       !Array.isArray(D.enemies) ||
       !Array.isArray(D.skills) ||
-      !Array.isArray(D.areas) ||
-      !Array.isArray(D.encounters) ||
       !Array.isArray(D.rankDefinitions) ||
       !Array.isArray(D.initialParty) ||
+      !Array.isArray(D.areas) ||
+      !Array.isArray(D.encounters) ||
       !D.balance
     ) {
-      throw new Error('data.jsを読み込めません。');
+      throw new Error('data.jsまたはcollection.jsを読み込めません。');
     }
 
     integer(D.rules.floors, 1, 100, '階層数');
     integer(D.rules.stagesPerFloor, 1, 100, 'ステージ数');
+    integer(D.rules.maxLevel, 1, 999, '最大レベル');
     integer(D.rules.maxRank, 1, D.rankDefinitions.length, '最大ランク');
+    integer(D.battleVersion, 1, 1000000, '戦闘バージョン');
 
     maxStage = D.rules.floors * D.rules.stagesPerFloor;
 
-    characters = new Map(D.characters.map((item) => [item.id, item]));
-    enemies = new Map(D.enemies.map((item) => [item.id, item]));
-    skills = new Map(D.skills.map((item) => [item.id, item]));
+    characters = new Map(D.characters.map((entry) => [entry.id, entry]));
+    enemies = new Map(D.enemies.map((entry) => [entry.id, entry]));
+    skills = new Map(D.skills.map((entry) => [entry.id, entry]));
 
     if (
       characters.size !== D.characters.length ||
@@ -660,31 +600,75 @@ function normalizeSave(raw) {
       throw new Error('初期パーティは異なる4人を指定してください。');
     }
 
-    for (const id of D.initialParty) {
-      const character = characters.get(id);
+    for (let rank = 1; rank <= D.rules.maxRank; rank += 1) {
+      finite(rankDefinition(rank).statMultiplier, 1, 1000000, 'ランク倍率');
+      finite(
+        D.balance.averageDamageFactors[rank - 1],
+        0.01,
+        100,
+        '想定ダメージ係数'
+      );
+    }
 
+    for (const character of D.characters) {
       if (
-        !character ||
         !D.elements[character.element] ||
+        !Array.isArray(character.skills) ||
         character.skills.length !== 3 ||
-        character.jobs.length < D.rules.maxRank
+        !Array.isArray(character.jobs) ||
+        character.jobs.length < D.rules.maxRank ||
+        !Array.isArray(character.portraits)
       ) {
-        throw new Error('キャラクター定義が不足しています。');
+        throw new Error('キャラクター設定が不足しています。');
       }
 
-      for (let rank = 1; rank <= D.rules.maxRank; rank += 1) {
-        finite(rankDefinition(rank).statMultiplier, 1, 1000000, 'ランク倍率');
+      for (const key of ['hp', 'atk', 'def']) {
+        integer(
+          character.base[key],
+          key === 'def' ? 0 : 1,
+          1000000,
+          '初期ステータス'
+        );
+        integer(character.growth[key], 0, 1000000, '成長量');
+      }
 
-        for (const skillId of character.skills) {
-          const skill = skillFor(skillId, rank);
-          integer(skill.cooldown, 1, 1000, '待ち時間');
+      for (const id of character.skills) {
+        for (let rank = 1; rank <= D.rules.maxRank; rank += 1) {
+          const skill = skillFor(id, rank);
+          integer(skill.cooldown, 1, 1000, 'スキル待ち時間');
 
           if (skill.type === 'cover') {
             finite(skill.reduction, 0, 0.95, 'かばう軽減');
+          } else if (skill.type === 'weaken') {
+            finite(skill.power, 0.01, 1, '弱体化倍率');
           } else {
             finite(skill.power, 0.01, 100, 'スキル倍率');
           }
+
+          if (skill.hits !== undefined) {
+            integer(skill.hits, 1, 20, '攻撃回数');
+          }
+
+          if (skill.defenseScale !== undefined) {
+            finite(skill.defenseScale, 0, 1, '防御参照倍率');
+          }
         }
+      }
+    }
+
+    for (const id of D.initialParty) {
+      if (!characters.has(id)) {
+        throw new Error('初期キャラクターがありません。');
+      }
+    }
+
+    for (const enemy of D.enemies) {
+      if (!D.elements[enemy.element]) {
+        throw new Error('敵の属性が不正です。');
+      }
+
+      for (const key of ['hpRate', 'atkRate', 'defRate']) {
+        finite(enemy[key], 0.01, 100, '敵能力補正');
       }
     }
 
@@ -693,17 +677,28 @@ function normalizeSave(raw) {
 
       const ids = encounterIds(index);
 
-      if (ids.length < 1 || ids.length > 3 || ids.some((id) => !enemies.has(id))) {
+      if (
+        ids.length < 1 ||
+        ids.length > 3 ||
+        ids.some((id) => !enemies.has(id))
+      ) {
         throw new Error('敵の出現設定が不正です：' + stageName(index));
       }
 
-      targetRounds(stageInfo(index).floor, stageInfo(index).boss);
+      const info = stageInfo(index);
+      targetRounds(info.floor, info.boss);
     }
   }
 
   function boot() {
     try {
       validateMaster();
+
+      C.init({
+        getSave: () => save,
+        stats: (member) => stats(member),
+        transact: (action) => transact(action)
+      });
 
       const text = localStorage.getItem(SAVE_KEY);
       let message = '全10階・100ステージ／自動保存';
@@ -712,17 +707,23 @@ function normalizeSave(raw) {
         const result = normalizeSave(JSON.parse(text));
         save = result.value;
 
-        if (result.migrated || result.battleReset) {
-          if (!localStorage.getItem(MIGRATION_BACKUP_KEY)) {
-            localStorage.setItem(MIGRATION_BACKUP_KEY, text);
+        if (
+          result.migrated ||
+          result.collectionMigrated ||
+          result.battleReset
+        ) {
+          if (!localStorage.getItem(BACKUP_KEY)) {
+            localStorage.setItem(BACKUP_KEY, text);
           }
 
           save.revision += 1;
           persist();
 
-          message = result.migrated
-            ? '全10階・100ステージ仕様へセーブを移行しました'
-            : '戦闘仕様更新に伴い、戦闘途中の状態を解除しました';
+          message = '所持・編成データを含む仕様へセーブを更新しました';
+
+          if (result.battleReset) {
+            message += '。旧戦闘途中データは解除しました';
+          }
 
           if (result.capped) {
             message += '。突破数は100へ補正しました';
@@ -745,78 +746,82 @@ function normalizeSave(raw) {
     }
   }
 
-  // File: game.js
+  function lockInput(locked) {
+    const app = document.querySelector('.app');
+    app.classList.toggle('is-animating', locked);
+    app.setAttribute('aria-busy', String(locked));
 
-async function transact(action) {
-  if (busy || fatal || !save) {
-    return false;
+    if (locked || fatal) {
+      document.querySelectorAll('button, select').forEach((element) => {
+        element.disabled = true;
+      });
+    } else {
+      document.querySelectorAll('select').forEach((element) => {
+        element.disabled = false;
+      });
+    }
   }
 
-  const before = clone(save);
-  busy = true;
-  battleFxQueue.length = 0;
+  async function transact(action) {
+    if (busy || fatal || !save) {
+      return false;
+    }
 
-  let committed = false;
-  let errorMessage = '';
+    const before = clone(save);
+    busy = true;
+    fxQueue.length = 0;
+    lockInput(true);
 
-  setBattleInputLocked(true);
+    let committed = false;
+    let message = '';
 
-  try {
-    const disk = JSON.parse(localStorage.getItem(SAVE_KEY));
+    try {
+      const disk = JSON.parse(localStorage.getItem(SAVE_KEY));
 
-    if (!disk || disk.revision !== save.revision) {
-      throw new Error(
-        '別タブで進行が変わりました。再読み込みしてください。'
+      if (!disk || disk.revision !== save.revision) {
+        throw new Error('別タブで進行が変わりました。再読み込みしてください。');
+      }
+
+      action();
+      save.revision = before.revision + 1;
+      persist();
+      pendingHeal = null;
+      committed = true;
+
+      if (fxQueue.length > 0) {
+        status('戦闘演出中…');
+      }
+
+      try {
+        await playFxQueue();
+      } catch (error) {
+        console.warn('演出を省略しました。', error);
+      }
+    } catch (error) {
+      if (!committed) {
+        save = before;
+      }
+
+      message = error.message;
+    } finally {
+      fxQueue.length = 0;
+      busy = false;
+      lockInput(false);
+      render();
+    }
+
+    if (fatal) {
+      status('別タブで保存データが変わりました。再読み込みしてください。');
+    } else {
+      status(
+        committed
+          ? '保存済み'
+          : '操作を確定できませんでした：' + message
       );
     }
 
-    action();
-
-    save.revision = before.revision + 1;
-    persist();
-
-    pendingHeal = null;
-    committed = true;
-
-    if (battleFxQueue.length > 0) {
-      status('戦闘演出中…');
-    }
-
-    // 表示中のDOMを残して演出し、終了後に最新状態へ更新する。
-    // セーブはすでに確定しているため、演出失敗で報酬を戻さない。
-    try {
-      await playBattleFxQueue();
-    } catch (error) {
-      console.warn('戦闘演出を省略しました。', error);
-    }
-  } catch (error) {
-    if (!committed) {
-      save = before;
-    }
-
-    errorMessage = error.message;
-  } finally {
-    battleFxQueue.length = 0;
-    busy = false;
-
-    render();
-    setBattleInputLocked(false);
+    return committed;
   }
-
-  if (fatal) {
-    status(
-      '別タブで保存データが変わりました。再読み込みしてください。'
-    );
-  } else {
-    status(
-      committed
-        ? '保存済み'
-        : '操作を確定できませんでした：' + errorMessage
-    );
-  }
-
-  return committed;
-}
 
   function isActive() {
     return !!save?.battle && save.battle.state === 'active';
@@ -837,7 +842,8 @@ async function transact(action) {
     for (let i = 1; i < index; i += 1) {
       grantExp(member, rewardFor(i).exp);
 
-      const threshold = D.balance.reincarnateAfterStage[member.rank - 1];
+      const threshold =
+        D.balance.reincarnateAfterStage[member.rank - 1];
 
       if (
         member.rank < D.rules.maxRank &&
@@ -856,8 +862,8 @@ async function transact(action) {
   }
 
   function targetRounds(floor, boss) {
-    const config = D.balance.roundTargets.find((item) => {
-      return floor >= item.from && floor <= item.to;
+    const config = D.balance.roundTargets.find((entry) => {
+      return floor >= entry.from && floor <= entry.to;
     });
 
     if (!config) {
@@ -875,7 +881,7 @@ async function transact(action) {
       return override.enemies;
     }
 
-    const group = D.encounters.find((item) => item.floor === info.floor);
+    const group = D.encounters.find((entry) => entry.floor === info.floor);
 
     if (!group) {
       throw new Error('階層の敵設定がありません。');
@@ -885,7 +891,6 @@ async function transact(action) {
       return [group.boss];
     }
 
-    // 各階で、弱い敵から順に種類を増やす。
     const unlocked = info.stage <= 2
       ? 1
       : info.stage <= 4
@@ -895,7 +900,6 @@ async function transact(action) {
           : 4;
 
     const pool = group.normal.slice(0, unlocked);
-
     const count = info.floor <= 2
       ? 1
       : info.stage % 3 === 0
@@ -926,23 +930,12 @@ async function transact(action) {
 
     return ids.map((id, i) => {
       const definition = enemies.get(id);
+      const duplicate = ids.filter((entry) => entry === id).length > 1;
 
       const maxHp = Math.max(
         1,
         Math.floor(totalHp / ids.length * definition.hpRate * hpMultiplier)
       );
-
-      const atk = Math.max(
-        1,
-        Math.floor(
-          (
-            value.def / 2 +
-            value.hp * (info.boss ? 0.14 : 0.09) / ids.length
-          ) * definition.atkRate * atkMultiplier
-        )
-      );
-
-      const duplicate = ids.filter((item) => item === id).length > 1;
 
       return {
         id,
@@ -950,7 +943,15 @@ async function transact(action) {
         element: definition.element,
         maxHp,
         hp: maxHp,
-        atk,
+        atk: Math.max(
+          1,
+          Math.floor(
+            (
+              value.def / 2 +
+              value.hp * (info.boss ? 0.14 : 0.09) / ids.length
+            ) * definition.atkRate * atkMultiplier
+          )
+        ),
         def: Math.max(
           1,
           Math.floor(
@@ -968,10 +969,23 @@ async function transact(action) {
       throw new Error('先に撤退してください。');
     }
 
-    integer(index, 1, Math.min(save.highestCleared + 1, maxStage), 'ステージ');
+    integer(
+      index,
+      1,
+      Math.min(save.highestCleared + 1, maxStage),
+      'ステージ'
+    );
 
     save.selectedStage = index;
     selectedEnemy = 0;
+
+    const spirit = C.equippedSpirit(save);
+    const blessing = spirit
+      ? {
+          name: spirit.name + ' R' + spirit.rank,
+          text: C.blessingText(spirit)
+        }
+      : null;
 
     save.battle = {
       version: D.battleVersion,
@@ -980,7 +994,10 @@ async function transact(action) {
       round: 1,
       actor: 0,
       rewards: null,
-      log: [stageName(index) + '／' + areaFor(index).name + '：戦闘開始'],
+      blessing,
+      log: [
+        stageName(index) + '／' + areaFor(index).name + '：戦闘開始'
+      ],
       allies: save.party.map((member) => {
         const value = stats(member);
         const definition = characters.get(member.id);
@@ -990,7 +1007,7 @@ async function transact(action) {
           rank: member.rank,
           maxHp: value.hp,
           hp: value.hp,
-          atk: value.atk,
+          atk: C.attackWithBlessing(save, member.id, value.atk),
           def: value.def,
           defense: false,
           cover: false,
@@ -1002,6 +1019,10 @@ async function transact(action) {
       }),
       enemies: createEnemies(index)
     };
+
+    if (blessing) {
+      addLog(blessing.name + '：' + blessing.text);
+    }
   }
 
   function addLog(text) {
@@ -1034,12 +1055,24 @@ async function transact(action) {
 
   function targetEnemy() {
     const list = save.battle.enemies;
+
     return list[selectedEnemy]?.hp > 0
       ? list[selectedEnemy]
       : list.find((enemy) => enemy.hp > 0);
   }
 
-  function hitEnemy(actor, enemy, power, defenseScale = 1, modifier = 1) {
+  function queueFx(event) {
+    fxQueue.push(event);
+  }
+
+  function hitEnemy(
+    actor,
+    enemy,
+    power,
+    defenseScale = 1,
+    modifier = 1,
+    skillAttack = false
+  ) {
     if (!enemy || enemy.hp <= 0) {
       return;
     }
@@ -1062,7 +1095,17 @@ async function transact(action) {
 
     enemy.mark = 1;
     enemy.hp = Math.max(0, enemy.hp - amount);
+
     addLog(definition.name + ' → ' + enemy.name + '：' + number(amount));
+
+    queueFx({
+      kind: 'damage',
+      side: 'enemy',
+      index: save.battle.enemies.indexOf(enemy),
+      element: definition.element,
+      amount,
+      skill: skillAttack
+    });
   }
 
   function useSkill(actor, slot, allyIndex) {
@@ -1076,17 +1119,32 @@ async function transact(action) {
     const skill = skillFor(definition.skills[slot], actor.rank);
     const battle = save.battle;
     const enemy = targetEnemy();
+    const actorIndex = battle.allies.indexOf(actor);
+
+    queueFx({
+      kind: 'cast',
+      side: 'ally',
+      index: actorIndex,
+      element: definition.element
+    });
 
     if (skill.type === 'damage') {
       addLog(definition.name + '：' + skill.name);
 
       const targets = skill.target === 'allEnemies'
-        ? battle.enemies.filter((item) => item.hp > 0)
+        ? battle.enemies.filter((entry) => entry.hp > 0)
         : [enemy];
 
       for (const target of targets) {
         for (let hit = 0; hit < (skill.hits || 1); hit += 1) {
-          hitEnemy(actor, target, skill.power, skill.defenseScale ?? 1);
+          hitEnemy(
+            actor,
+            target,
+            skill.power,
+            skill.defenseScale ?? 1,
+            1,
+            true
+          );
         }
       }
     } else if (skill.type === 'heal') {
@@ -1098,31 +1156,71 @@ async function transact(action) {
       }
 
       const before = target.hp;
+
       target.hp = Math.min(
         target.maxHp,
         target.hp + Math.floor(actor.atk * skill.power)
       );
 
+      const amount = target.hp - before;
+
       addLog(
         skill.name + '：' + characters.get(target.id).name +
-        'を' + number(target.hp - before) + '回復'
+        'を' + number(amount) + '回復'
       );
-    } else if (skill.type === 'buff') {
-      actor.attackBuff = skill.power;
+
+      queueFx({
+        kind: 'heal',
+        side: 'ally',
+        index: allyIndex,
+        element: definition.element,
+        amount
+      });
+    } else if (skill.type === 'buff' || skill.type === 'cover') {
+      if (skill.type === 'buff') {
+        actor.attackBuff = skill.power;
+      } else {
+        actor.cover = true;
+        actor.coverReduction = skill.reduction;
+      }
+
       addLog(definition.name + '：' + skill.name);
-    } else if (skill.type === 'cover') {
-      actor.cover = true;
-      actor.coverReduction = skill.reduction;
-      addLog(definition.name + '：' + skill.name);
+
+      queueFx({
+        kind: 'enhance',
+        side: 'ally',
+        index: actorIndex,
+        element: definition.element
+      });
     } else if (skill.type === 'weaken') {
-      battle.enemies.forEach((target) => {
-        target.weaken = skill.power;
+      battle.enemies.forEach((target, index) => {
+        if (target.hp > 0) {
+          target.weaken = skill.power;
+
+          queueFx({
+            kind: 'debuff',
+            side: 'enemy',
+            index,
+            element: definition.element
+          });
+        }
       });
 
       addLog(skill.name + '：敵の攻撃力が低下');
     } else if (skill.type === 'mark') {
+      if (!enemy) {
+        throw new Error('対象の敵がいません。');
+      }
+
       enemy.mark = skill.power;
       addLog(skill.name + '：' + enemy.name + 'に光の印');
+
+      queueFx({
+        kind: 'debuff',
+        side: 'enemy',
+        index: battle.enemies.indexOf(enemy),
+        element: definition.element
+      });
     } else {
       throw new Error('未対応のスキルです。');
     }
@@ -1141,11 +1239,25 @@ async function transact(action) {
     let endTurn = false;
 
     if (command === 'attack') {
+      queueFx({
+        kind: 'move',
+        side: 'ally',
+        index: battle.actor
+      });
+
       hitEnemy(actor, targetEnemy(), 1, 1, actor.attackBuff);
       endTurn = true;
     } else if (command === 'defend') {
       actor.defense = true;
       addLog(characters.get(actor.id).name + 'は防御した');
+
+      queueFx({
+        kind: 'enhance',
+        side: 'ally',
+        index: battle.actor,
+        element: characters.get(actor.id).element
+      });
+
       endTurn = true;
     } else if (command === 'skill') {
       useSkill(actor, slot, allyIndex);
@@ -1215,7 +1327,17 @@ async function transact(action) {
     );
 
     target.hp = Math.max(0, target.hp - amount);
+
     addLog(enemy.name + ' → ' + definition.name + '：' + number(amount));
+
+    queueFx({
+      kind: 'damage',
+      side: 'ally',
+      index: save.battle.allies.indexOf(target),
+      element: enemy.element,
+      amount,
+      skill: power !== 1
+    });
   }
 
   function enemyPhase() {
@@ -1224,7 +1346,7 @@ async function transact(action) {
     const big = boss && battle.round % 3 === 0;
     const sweep = big && battle.round % 6 === 0;
 
-    for (const enemy of battle.enemies.filter((item) => item.hp > 0)) {
+    for (const enemy of battle.enemies.filter((entry) => entry.hp > 0)) {
       const living = battle.allies.filter((ally) => ally.hp > 0);
 
       if (!living.length) {
@@ -1232,6 +1354,12 @@ async function transact(action) {
       }
 
       const enraged = boss && enemy.hp <= enemy.maxHp / 2;
+
+      queueFx({
+        kind: 'move',
+        side: 'enemy',
+        index: battle.enemies.indexOf(enemy)
+      });
 
       if (sweep) {
         addLog(enemy.name + 'の全体攻撃！');
@@ -1284,6 +1412,7 @@ async function transact(action) {
 
     const levelUps = [];
 
+    // 経験値を獲得するのは出撃中の4人だけ。
     for (const member of save.party) {
       const before = member.level;
       grantExp(member, reward.exp);
@@ -1309,7 +1438,7 @@ async function transact(action) {
   }
 
   function reincarnate(id) {
-    const member = save.party.find((item) => item.id === id);
+    const member = save.party.find((entry) => entry.id === id);
 
     if (
       isActive() ||
@@ -1471,12 +1600,21 @@ async function transact(action) {
         ? 'CLEAR'
         : 'R —';
 
+    $('openManagement').disabled = false;
+
     renderBackground(index);
     renderEnemies();
     renderParty();
     renderCommands();
     renderResult();
     renderManagement();
+    C.render();
+
+    if (battle) {
+      $('blessingStatus').textContent = battle.blessing
+        ? battle.blessing.name + '｜' + battle.blessing.text
+        : 'この戦闘の精霊加護：なし';
+    }
 
     $('log').replaceChildren();
 
@@ -1486,10 +1624,8 @@ async function transact(action) {
 
     $('log').scrollTop = $('log').scrollHeight;
 
-    if (fatal) {
-      document.querySelectorAll('button').forEach((button) => {
-        button.disabled = true;
-      });
+    if (fatal || busy) {
+      lockInput(true);
     }
   }
 
@@ -1543,13 +1679,11 @@ async function transact(action) {
 
       button.disabled = !isActive() || enemy.hp <= 0;
       button.title = enemy.name;
-
+      button.setAttribute('aria-pressed', String(selectedEnemy === index));
       button.setAttribute(
         'aria-label',
         enemy.name + ' HP ' + enemy.hp + '/' + enemy.maxHp
       );
-
-      button.setAttribute('aria-pressed', String(selectedEnemy === index));
 
       frame.append(
         image([definition.image], enemy.element, 'enemy-image', enemy.name, true),
@@ -1620,7 +1754,13 @@ async function transact(action) {
       button.append(frame);
 
       button.onclick = () => {
-        if (pendingHeal !== null && hp > 0 && isActive() && !fatal && !busy) {
+        if (
+          pendingHeal !== null &&
+          hp > 0 &&
+          isActive() &&
+          !fatal &&
+          !busy
+        ) {
           const slot = pendingHeal;
           transact(() => performAction('skill', slot, index));
         }
@@ -1727,9 +1867,12 @@ async function transact(action) {
     }
 
     if (save.party.some((member) => {
-      return member.level === D.rules.maxLevel && member.rank < D.rules.maxRank;
+      return member.level === D.rules.maxLevel &&
+        member.rank < D.rules.maxRank;
     })) {
-      root.append(node('p', 'muted', '転生可能な仲間がいます。管理で確認できます。'));
+      root.append(
+        node('p', 'muted', '転生可能な仲間がいます。管理で確認できます。')
+      );
     }
 
     const buttons = node('div', 'result-buttons');
@@ -1742,7 +1885,9 @@ async function transact(action) {
 
     if (!battle) {
       addButton(
-        save.highestCleared === maxStage ? '最終ステージに再挑戦' : '挑戦する',
+        save.highestCleared === maxStage
+          ? '最終ステージに再挑戦'
+          : '挑戦する',
         Math.min(save.highestCleared + 1, maxStage),
         true
       );
@@ -1759,8 +1904,9 @@ async function transact(action) {
 
   function renderManagement() {
     $('progressText').textContent =
-      '突破 ' + save.highestCleared + '/100ステージ・' +
-      Math.floor(save.highestCleared / D.rules.stagesPerFloor) + '/10階';
+      '突破 ' + save.highestCleared + '/' + maxStage + 'ステージ・' +
+      Math.floor(save.highestCleared / D.rules.stagesPerFloor) +
+      '/' + D.rules.floors + '階';
 
     $('coinText').textContent = number(save.coins) + ' COIN';
 
@@ -1772,8 +1918,8 @@ async function transact(action) {
     $('floorSelect').replaceChildren();
 
     for (let floor = 1; floor <= maxFloor; floor += 1) {
-      const firstIndex = (floor - 1) * D.rules.stagesPerFloor + 1;
-      const option = node('option', '', floor + '階／' + areaFor(firstIndex).name);
+      const first = (floor - 1) * D.rules.stagesPerFloor + 1;
+      const option = node('option', '', floor + '階／' + areaFor(first).name);
       option.value = floor;
       $('floorSelect').append(option);
     }
@@ -1788,10 +1934,15 @@ async function transact(action) {
     for (const member of save.party) {
       const definition = characters.get(member.id);
       const value = stats(member);
+      const blessedAtk = C.attackWithBlessing(save, member.id, value.atk);
       const panel = node('div', 'member-panel');
 
       panel.append(
-        node('strong', '', definition.name + '／' + definition.jobs[member.rank - 1]),
+        node(
+          'strong',
+          '',
+          definition.name + '／' + definition.jobs[member.rank - 1]
+        ),
         node(
           'p',
           'muted',
@@ -1799,6 +1950,11 @@ async function transact(action) {
           '／HP ' + number(value.hp) +
           ' ATK ' + number(value.atk) +
           ' DEF ' + number(value.def)
+        ),
+        node(
+          'p',
+          'muted',
+          '装備中の精霊による戦闘開始時ATK：' + number(blessedAtk)
         ),
         node(
           'p',
@@ -1811,7 +1967,9 @@ async function transact(action) {
 
       for (const id of definition.skills) {
         const skill = skillFor(id, member.rank);
-        panel.append(node('p', 'muted', skill.name + '：' + skillDescription(skill)));
+        panel.append(
+          node('p', 'muted', skill.name + '：' + skillDescription(skill))
+        );
       }
 
       const button = node(
@@ -1846,6 +2004,7 @@ async function transact(action) {
           'ATK ' + value.atk + ' → ' + after.atk,
           'DEF ' + value.def + ' → ' + after.def,
           '',
+          '上記は精霊加護を含まない数値です。',
           'スキルも上位版になります。',
           'コインと突破状況は維持します。'
         ].join('\n');
@@ -1923,7 +2082,7 @@ async function transact(action) {
     const link = document.createElement('a');
 
     link.href = url;
-    link.download = 'towerquest-100stages-' +
+    link.download = 'towerquest-collection-' +
       new Date().toISOString().slice(0, 10) + '.json';
 
     document.body.append(link);
@@ -1950,7 +2109,9 @@ async function transact(action) {
         '必要なら先にバックアップしてください。',
         '',
         'コイン：' + number(result.value.coins),
-        '突破済み：' + result.value.highestCleared + '/100',
+        '突破済み：' + result.value.highestCleared + '/' + maxStage,
+        '所持キャラ：' + result.value.ownedCharacters.length + '人',
+        '所持精霊：' + result.value.ownedSpirits.length + '体',
         result.migrated ? '旧セーブを新仕様へ移行します。' : '',
         result.capped ? '旧突破数を100へ補正します。' : '',
         result.battleReset ? '旧戦闘途中データは解除します。' : '',
@@ -1959,10 +2120,15 @@ async function transact(action) {
       ].filter(Boolean).join('\n');
 
       if (confirm(message)) {
-        transact(() => {
+        const success = await transact(() => {
           save = result.value;
           selectedEnemy = 0;
         });
+
+        if (success) {
+          $('formationDialog').close();
+          $('collectionDialog').close();
+        }
       }
     } catch (error) {
       status('読み込みエラー：' + error.message);
@@ -1970,628 +2136,318 @@ async function transact(action) {
       $('saveFile').value = '';
     }
   }
-// File: game.js
 
-/* ========================================
-   戦闘演出キュー
-   ======================================== */
-
-const battleFxQueue = [];
-
-let enemyFxActors = null;
-
-function setBattleInputLocked(locked) {
-  const app = document.querySelector('.app');
-
-  if (app) {
-    app.classList.toggle('is-animating', locked);
-    app.setAttribute('aria-busy', String(locked));
+  function fxTarget(side, index) {
+    const root = side === 'ally' ? $('party') : $('enemies');
+    return root.children[index] || null;
   }
 
-  if (locked || fatal) {
-    document.querySelectorAll('button').forEach((button) => {
-      button.disabled = true;
+  function reducedMotion() {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  async function animate(element, frames, duration) {
+    if (!element || typeof element.animate !== 'function') {
+      return;
+    }
+
+    const animation = element.animate(frames, {
+      duration: reducedMotion() ? Math.min(duration, 100) : duration,
+      easing: 'ease-out',
+      fill: 'none'
     });
+
+    try {
+      await animation.finished;
+    } catch (error) {
+      // 演出中断時も、確定済みの進行は維持する。
+    } finally {
+      animation.cancel();
+    }
   }
 
-  // ロック解除時のボタン状態はrender()で復元する。
-}
+  async function attackMove(element) {
+    if (!element) {
+      return;
+    }
 
-function queueBattleFx(event) {
-  battleFxQueue.push(event);
-}
+    element.classList.add('is-performing');
 
-function fxTarget(side, index) {
-  const root = side === 'ally'
-    ? $('party')
-    : $('enemies');
+    try {
+      const distance = reducedMotion() ? 0 : 36;
 
-  return root.children[index] || null;
-}
-
-function prefersReducedMotion() {
-  return window.matchMedia(
-    '(prefers-reduced-motion: reduce)'
-  ).matches;
-}
-
-async function animateElement(element, frames, duration) {
-  if (!element || typeof element.animate !== 'function') {
-    return;
+      await animate(
+        element,
+        [
+          { transform: 'translateY(0)' },
+          {
+            transform: 'translateY(-' + distance + 'px)',
+            offset: 0.45
+          },
+          { transform: 'translateY(0)' }
+        ],
+        300
+      );
+    } finally {
+      element.classList.remove('is-performing');
+    }
   }
 
-  const animation = element.animate(frames, {
-    duration: prefersReducedMotion()
-      ? Math.min(duration, 100)
-      : duration,
-    easing: 'ease-out',
-    fill: 'none'
-  });
+  async function shake(element) {
+    const distance = reducedMotion() ? 0 : 6;
 
-  try {
-    await animation.finished;
-  } catch (error) {
-    // タブ切り替えなどで演出が中断されても進行は維持する。
-  } finally {
-    animation.cancel();
-  }
-}
-
-async function animateAttackMove(element) {
-  if (!element) {
-    return;
-  }
-
-  element.classList.add('is-performing');
-
-  try {
-    const distance = prefersReducedMotion() ? 0 : 36;
-
-    await animateElement(
+    await animate(
       element,
       [
-        { transform: 'translateY(0)' },
-        {
-          transform: 'translateY(-' + distance + 'px)',
-          offset: 0.45
-        },
-        { transform: 'translateY(0)' }
+        { transform: 'translateX(0)' },
+        { transform: 'translateX(-' + distance + 'px)' },
+        { transform: 'translateX(' + distance + 'px)' },
+        { transform: 'translateX(-' + distance + 'px)' },
+        { transform: 'translateX(' + distance + 'px)' },
+        { transform: 'translateX(0)' }
       ],
-      300
+      240
     );
-  } finally {
-    element.classList.remove('is-performing');
-  }
-}
-
-async function animateShake(element) {
-  if (!element) {
-    return;
   }
 
-  const distance = prefersReducedMotion() ? 0 : 6;
+  async function showNumber(element, amount, healing) {
+    if (!element) {
+      return;
+    }
 
-  await animateElement(
-    element,
-    [
-      { transform: 'translateX(0)' },
-      { transform: 'translateX(-' + distance + 'px)' },
-      { transform: 'translateX(' + distance + 'px)' },
-      { transform: 'translateX(-' + distance + 'px)' },
-      { transform: 'translateX(' + distance + 'px)' },
-      { transform: 'translateX(0)' }
-    ],
-    240
-  );
-}
-
-async function showBattleNumber(element, amount, healing) {
-  if (!element) {
-    return;
-  }
-
-  const label = node(
-    'div',
-    'battle-number' + (healing ? ' healing' : ''),
-    (healing ? '+' : '') + number(amount)
-  );
-
-  element.append(label);
-
-  try {
-    await animateElement(
-      label,
-      [
-        {
-          opacity: 0,
-          transform: 'translate(-50%, 8px)'
-        },
-        {
-          opacity: 1,
-          transform: 'translate(-50%, -4px)',
-          offset: 0.25
-        },
-        {
-          opacity: 0,
-          transform: 'translate(-50%, -30px)'
-        }
-      ],
-      450
+    const label = node(
+      'div',
+      'battle-number' + (healing ? ' healing' : ''),
+      (healing ? '+' : '') + number(amount)
     );
-  } finally {
-    label.remove();
-  }
-}
 
-async function showAttributeEffect(element, elementId, mode) {
-  if (!element) {
-    return;
-  }
+    element.append(label);
 
-  const color = mode === 'heal'
-    ? '#86efb7'
-    : D.elements[elementId]?.color || '#ffffff';
-
-  const effect = node(
-    'div',
-    'battle-effect effect-' + elementId + ' effect-' + mode
-  );
-
-  effect.style.setProperty('--effect-color', color);
-
-  const ring = node('div', 'effect-ring');
-  const core = node('div', 'effect-core');
-
-  effect.append(ring, core);
-  element.append(effect);
-
-  const animations = [];
-
-  animations.push(
-    animateElement(
-      ring,
-      [
-        {
-          opacity: 0,
-          transform: 'translate(-50%, -50%) scale(0.35)'
-        },
-        {
-          opacity: 0.95,
-          transform: 'translate(-50%, -50%) scale(0.85)',
-          offset: 0.35
-        },
-        {
-          opacity: 0,
-          transform: 'translate(-50%, -50%) scale(1.45)'
-        }
-      ],
-      380
-    )
-  );
-
-  const baseTransform = mode === 'strike'
-    ? 'translate(-50%, -50%) rotate(-35deg)'
-    : 'translate(-50%, -50%)';
-
-  animations.push(
-    animateElement(
-      core,
-      [
-        {
-          opacity: 0,
-          transform: baseTransform + ' scale(0.5)'
-        },
-        {
-          opacity: 0.85,
-          transform: baseTransform + ' scale(1)',
-          offset: 0.35
-        },
-        {
-          opacity: 0,
-          transform: baseTransform + ' scale(1.3)'
-        }
-      ],
-      320
-    )
-  );
-
-  const count = prefersReducedMotion() ? 4 : 8;
-
-  for (let i = 0; i < count; i += 1) {
-    const particle = node('div', 'effect-particle');
-    effect.append(particle);
-
-    const angle = Math.PI * 2 * i / count;
-    const distance = mode === 'heal' ? 28 : 38;
-    const x = Math.cos(angle) * distance;
-    const y = mode === 'heal'
-      ? -20 - Math.abs(Math.sin(angle) * distance)
-      : Math.sin(angle) * distance;
-
-    animations.push(
-      animateElement(
-        particle,
+    try {
+      await animate(
+        label,
         [
           {
             opacity: 0,
-            transform: 'translate(-50%, -50%) scale(0.3)'
+            transform: 'translate(-50%, 8px)'
           },
           {
             opacity: 1,
-            offset: 0.2
+            transform: 'translate(-50%, -4px)',
+            offset: 0.25
           },
           {
             opacity: 0,
-            transform:
-              'translate(calc(-50% + ' + x + 'px), ' +
-              'calc(-50% + ' + y + 'px)) scale(0.8)'
+            transform: 'translate(-50%, -30px)'
           }
         ],
-        420
+        450
+      );
+    } finally {
+      label.remove();
+    }
+  }
+
+  async function attributeEffect(element, elementId, mode) {
+    if (!element) {
+      return;
+    }
+
+    const color = mode === 'heal'
+      ? '#86efb7'
+      : D.elements[elementId]?.color || '#ffffff';
+
+    const effect = node(
+      'div',
+      'battle-effect effect-' + elementId + ' effect-' + mode
+    );
+
+    effect.style.setProperty('--effect-color', color);
+
+    const ring = node('div', 'effect-ring');
+    const core = node('div', 'effect-core');
+    effect.append(ring, core);
+    element.append(effect);
+
+    const jobs = [
+      animate(
+        ring,
+        [
+          {
+            opacity: 0,
+            transform: 'translate(-50%, -50%) scale(0.35)'
+          },
+          {
+            opacity: 0.95,
+            transform: 'translate(-50%, -50%) scale(0.85)',
+            offset: 0.35
+          },
+          {
+            opacity: 0,
+            transform: 'translate(-50%, -50%) scale(1.45)'
+          }
+        ],
+        380
+      )
+    ];
+
+    const coreTransform = mode === 'strike'
+      ? 'translate(-50%, -50%) rotate(-35deg)'
+      : 'translate(-50%, -50%)';
+
+    jobs.push(
+      animate(
+        core,
+        [
+          {
+            opacity: 0,
+            transform: coreTransform + ' scale(0.5)'
+          },
+          {
+            opacity: 0.85,
+            transform: coreTransform + ' scale(1)',
+            offset: 0.35
+          },
+          {
+            opacity: 0,
+            transform: coreTransform + ' scale(1.3)'
+          }
+        ],
+        320
       )
     );
-  }
 
-  try {
-    await Promise.all(animations);
-  } finally {
-    effect.remove();
-  }
-}
+    const count = reducedMotion() ? 4 : 8;
 
-async function playBattleFxQueue() {
-  for (const event of battleFxQueue) {
-    if (fatal) {
-      break;
-    }
+    for (let i = 0; i < count; i += 1) {
+      const particle = node('div', 'effect-particle');
+      effect.append(particle);
 
-    const target = fxTarget(event.side, event.index);
+      const angle = Math.PI * 2 * i / count;
+      const distance = mode === 'heal' ? 28 : 38;
+      const x = Math.cos(angle) * distance;
+      const y = mode === 'heal'
+        ? -20 - Math.abs(Math.sin(angle) * distance)
+        : Math.sin(angle) * distance;
 
-    if (event.kind === 'move') {
-      await animateAttackMove(target);
-      continue;
-    }
-
-    if (event.kind === 'cast') {
-      await showAttributeEffect(
-        target,
-        event.element,
-        'enhance'
-      );
-      continue;
-    }
-
-    if (event.kind === 'damage') {
-      await Promise.all([
-        animateShake(target),
-        showBattleNumber(target, event.amount, false),
-        showAttributeEffect(
-          target,
-          event.element,
-          event.skill ? 'attack' : 'strike'
+      jobs.push(
+        animate(
+          particle,
+          [
+            {
+              opacity: 0,
+              transform: 'translate(-50%, -50%) scale(0.3)'
+            },
+            {
+              opacity: 1,
+              offset: 0.2
+            },
+            {
+              opacity: 0,
+              transform:
+                'translate(calc(-50% + ' + x + 'px), ' +
+                'calc(-50% + ' + y + 'px)) scale(0.8)'
+            }
+          ],
+          420
         )
-      ]);
-
-      continue;
-    }
-
-    if (event.kind === 'heal') {
-      await Promise.all([
-        showBattleNumber(target, event.amount, true),
-        showAttributeEffect(target, event.element, 'heal')
-      ]);
-
-      continue;
-    }
-
-    if (event.kind === 'enhance') {
-      await showAttributeEffect(
-        target,
-        event.element,
-        'enhance'
-      );
-
-      continue;
-    }
-
-    if (event.kind === 'debuff') {
-      await showAttributeEffect(
-        target,
-        event.element,
-        'attack'
       );
     }
-  }
-}
 
-/* ========================================
-   既存の戦闘処理に演出イベントを追加
-   ======================================== */
-
-let activeSkillFx = false;
-
-const performActionWithoutFx = performAction;
-
-performAction = function (command, slot, allyIndex) {
-  if (
-    command === 'attack' &&
-    isActive()
-  ) {
-    queueBattleFx({
-      kind: 'move',
-      side: 'ally',
-      index: save.battle.actor
-    });
+    try {
+      await Promise.all(jobs);
+    } finally {
+      effect.remove();
+    }
   }
 
-  return performActionWithoutFx(command, slot, allyIndex);
-};
-
-const hitEnemyWithoutFx = hitEnemy;
-
-hitEnemy = function (
-  actor,
-  enemy,
-  power,
-  defenseScale = 1,
-  modifier = 1
-) {
-  if (!enemy || enemy.hp <= 0) {
-    return hitEnemyWithoutFx(
-      actor,
-      enemy,
-      power,
-      defenseScale,
-      modifier
-    );
-  }
-
-  const definition = characters.get(actor.id);
-  const index = save.battle.enemies.indexOf(enemy);
-  const before = enemy.hp;
-  const mark = enemy.mark;
-
-  // ダメージ数値は、HPを超えた分も含めて表示する。
-  const base = Math.max(
-    1,
-    actor.atk * power - enemy.def * defenseScale / 2
-  );
-
-  const amount = Math.max(
-    1,
-    Math.floor(
-      base *
-      elementRate(definition.element, enemy.element) *
-      modifier *
-      mark
-    )
-  );
-
-  const result = hitEnemyWithoutFx(
-    actor,
-    enemy,
-    power,
-    defenseScale,
-    modifier
-  );
-
-  if (enemy.hp < before) {
-    queueBattleFx({
-      kind: 'damage',
-      side: 'enemy',
-      index,
-      element: definition.element,
-      amount,
-      skill: activeSkillFx
-    });
-  }
-
-  return result;
-};
-
-const useSkillWithoutFx = useSkill;
-
-useSkill = function (actor, slot, allyIndex) {
-  const definition = characters.get(actor.id);
-  const skill = skillFor(
-    definition.skills[slot],
-    actor.rank
-  );
-
-  const actorIndex = save.battle.allies.indexOf(actor);
-  const target = targetEnemy();
-  const targetIndex = save.battle.enemies.indexOf(target);
-
-  queueBattleFx({
-    kind: 'cast',
-    side: 'ally',
-    index: actorIndex,
-    element: definition.element
-  });
-
-  const healTarget = skill.type === 'heal'
-    ? save.battle.allies[allyIndex]
-    : null;
-
-  const previousHp = healTarget?.hp ?? 0;
-  const previousSkillFx = activeSkillFx;
-
-  let result;
-
-  activeSkillFx = true;
-
-  try {
-    result = useSkillWithoutFx(actor, slot, allyIndex);
-  } finally {
-    activeSkillFx = previousSkillFx;
-  }
-
-  if (skill.type === 'heal') {
-    queueBattleFx({
-      kind: 'heal',
-      side: 'ally',
-      index: allyIndex,
-      element: definition.element,
-      amount: healTarget.hp - previousHp
-    });
-  } else if (
-    skill.type === 'buff' ||
-    skill.type === 'cover'
-  ) {
-    queueBattleFx({
-      kind: 'enhance',
-      side: 'ally',
-      index: actorIndex,
-      element: definition.element
-    });
-  } else if (skill.type === 'weaken') {
-    save.battle.enemies.forEach((enemy, index) => {
-      if (enemy.hp > 0) {
-        queueBattleFx({
-          kind: 'debuff',
-          side: 'enemy',
-          index,
-          element: definition.element
-        });
+  async function playFxQueue() {
+    for (const event of fxQueue) {
+      if (fatal) {
+        break;
       }
-    });
-  } else if (skill.type === 'mark') {
-    queueBattleFx({
-      kind: 'debuff',
-      side: 'enemy',
-      index: targetIndex,
-      element: definition.element
-    });
+
+      const target = fxTarget(event.side, event.index);
+
+      if (event.kind === 'move') {
+        await attackMove(target);
+      } else if (event.kind === 'damage') {
+        await Promise.all([
+          shake(target),
+          showNumber(target, event.amount, false),
+          attributeEffect(
+            target,
+            event.element,
+            event.skill ? 'attack' : 'strike'
+          )
+        ]);
+      } else if (event.kind === 'heal') {
+        await Promise.all([
+          showNumber(target, event.amount, true),
+          attributeEffect(target, event.element, 'heal')
+        ]);
+      } else if (event.kind === 'cast' || event.kind === 'enhance') {
+        await attributeEffect(target, event.element, 'enhance');
+      } else if (event.kind === 'debuff') {
+        await attributeEffect(target, event.element, 'attack');
+      }
+    }
   }
 
-  return result;
-};
-
-const enemyPhaseWithoutFx = enemyPhase;
-
-enemyPhase = function () {
-  enemyFxActors = new Set();
-
-  try {
-    return enemyPhaseWithoutFx();
-  } finally {
-    enemyFxActors = null;
-  }
-};
-
-const damageAllyWithoutFx = damageAlly;
-
-damageAlly = function (
-  enemy,
-  target,
-  power,
-  enraged,
-  single
-) {
-  const enemyIndex = save.battle.enemies.indexOf(enemy);
-  const allyIndex = save.battle.allies.indexOf(target);
-
-  // 全体攻撃でも、同じ敵の移動は1回だけにする。
-  if (
-    enemyFxActors &&
-    !enemyFxActors.has(enemyIndex)
-  ) {
-    enemyFxActors.add(enemyIndex);
-
-    queueBattleFx({
-      kind: 'move',
-      side: 'enemy',
-      index: enemyIndex
-    });
-  }
-
-  const definition = characters.get(target.id);
-  const before = target.hp;
-
-  const base = Math.max(
-    1,
-    enemy.atk *
-    enemy.weaken *
-    power *
-    (enraged ? 1.15 : 1) -
-    target.def / 2
-  );
-
-  const coverRate = single && target.cover
-    ? 1 - target.coverReduction
-    : 1;
-
-  const amount = Math.max(
-    1,
-    Math.floor(
-      base *
-      elementRate(enemy.element, definition.element) *
-      (target.defense ? 0.5 : 1) *
-      coverRate
-    )
-  );
-
-  const result = damageAllyWithoutFx(
-    enemy,
-    target,
-    power,
-    enraged,
-    single
-  );
-
-  if (target.hp < before) {
-    queueBattleFx({
-      kind: 'damage',
-      side: 'ally',
-      index: allyIndex,
-      element: enemy.element,
-      amount,
-      skill: power !== 1
-    });
-  }
-
-  return result;
-};
   function bindEvents() {
     $('openManagement').onclick = () => {
       if (!fatal && !busy && save) {
         renderManagement();
+        C.render();
         $('management').showModal();
       }
     };
 
-    $('closeManagement').onclick = () => $('management').close();
+    $('closeManagement').onclick = () => {
+      if (!busy) {
+        $('management').close();
+      }
+    };
 
     $('floorSelect').onchange = () => {
-      if (!fatal) {
+      if (!fatal && !busy) {
         populateStages();
       }
     };
 
     $('stageSelect').onchange = () => {
-      if (!fatal) {
+      if (!fatal && !busy) {
         renderPreview();
       }
     };
 
-    $('startSelected').onclick = () => {
+    $('startSelected').onclick = async () => {
       const index = selectedIndex();
 
-      if (transact(() => startBattle(index))) {
+      if (await transact(() => startBattle(index))) {
         $('management').close();
       }
     };
 
     $('retreat').onclick = () => {
-      if (isActive() && confirm('撤退しますか？ この戦闘の報酬は獲得できません。')) {
+      if (
+        !busy &&
+        isActive() &&
+        confirm('撤退しますか？ この戦闘の報酬は獲得できません。')
+      ) {
         transact(() => {
           save.battle = null;
         });
       }
     };
 
-    $('attack').onclick = () => transact(() => performAction('attack'));
-    $('defend').onclick = () => transact(() => performAction('defend'));
+    $('attack').onclick = () => {
+      transact(() => performAction('attack'));
+    };
+
+    $('defend').onclick = () => {
+      transact(() => performAction('defend'));
+    };
 
     $('cancelHeal').onclick = () => {
       if (!fatal && !busy) {
@@ -2613,17 +2469,22 @@ damageAlly = function (
       importSave(event.target.files[0]);
     };
 
+    // Escapeキーで演出中の管理画面などを閉じない。
+    document.querySelectorAll('dialog').forEach((dialog) => {
+      dialog.addEventListener('cancel', (event) => {
+        if (busy) {
+          event.preventDefault();
+        }
+      });
+    });
+
     window.addEventListener('storage', (event) => {
       if (event.key !== SAVE_KEY && event.key !== null) {
         return;
       }
 
       fatal = true;
-
-      document.querySelectorAll('button').forEach((button) => {
-        button.disabled = true;
-      });
-
+      lockInput(true);
       status('別タブで保存データが変わりました。再読み込みしてください。');
     });
   }
