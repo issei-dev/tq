@@ -27,13 +27,21 @@
       <span id="roundLabel">R —</span>
     </section>
 
-    <section id="arena" class="arena" aria-label="敵">
-      <div id="warning" role="status"></div>
-      <div id="enemies"></div>
-      <div id="emptyArena">塔に挑戦しよう</div>
-    </section>
+    <!-- Output: html -->
+<!-- File: index.html -->
+<section
+  id="arena"
+  class="arena shared-battle-area"
+  aria-label="戦闘エリア"
+>
+  <section class="enemy-area" aria-label="敵">
+    <div id="warning" role="status"></div>
+    <div id="enemies"></div>
+    <div id="emptyArena">塔に挑戦しよう</div>
+  </section>
 
-    <section id="party" aria-label="パーティ"></section>
+  <section id="party" aria-label="パーティ"></section>
+</section>
 
     <section id="commands" hidden>
       <div class="turn-row">
