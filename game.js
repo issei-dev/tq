@@ -658,39 +658,78 @@
     }
   }
 
-  function transact(action) {
-    if (busy || fatal || !save) {
-      return false;
+  // File: game.js
+
+async function transact(action) {
+  if (busy || fatal || !save) {
+    return false;
+  }
+
+  const before = clone(save);
+  busy = true;
+  battleFxQueue.length = 0;
+
+  let committed = false;
+  let errorMessage = '';
+
+  setBattleInputLocked(true);
+
+  try {
+    const disk = JSON.parse(localStorage.getItem(SAVE_KEY));
+
+    if (!disk || disk.revision !== save.revision) {
+      throw new Error(
+        '別タブで進行が変わりました。再読み込みしてください。'
+      );
     }
 
-    const before = clone(save);
-    busy = true;
-    let success = false;
-    let message = '';
+    action();
 
+    save.revision = before.revision + 1;
+    persist();
+
+    pendingHeal = null;
+    committed = true;
+
+    if (battleFxQueue.length > 0) {
+      status('戦闘演出中…');
+    }
+
+    // 表示中のDOMを残して演出し、終了後に最新状態へ更新する。
+    // セーブはすでに確定しているため、演出失敗で報酬を戻さない。
     try {
-      const disk = JSON.parse(localStorage.getItem(SAVE_KEY));
-
-      if (!disk || disk.revision !== save.revision) {
-        throw new Error('別タブで進行が変わりました。再読み込みしてください。');
-      }
-
-      action();
-      save.revision = before.revision + 1;
-      persist();
-      pendingHeal = null;
-      success = true;
+      await playBattleFxQueue();
     } catch (error) {
-      save = before;
-      message = error.message;
-    } finally {
-      busy = false;
+      console.warn('戦闘演出を省略しました。', error);
     }
+  } catch (error) {
+    if (!committed) {
+      save = before;
+    }
+
+    errorMessage = error.message;
+  } finally {
+    battleFxQueue.length = 0;
+    busy = false;
 
     render();
-    status(success ? '保存済み' : '操作を確定できませんでした：' + message);
-    return success;
+    setBattleInputLocked(false);
   }
+
+  if (fatal) {
+    status(
+      '別タブで保存データが変わりました。再読み込みしてください。'
+    );
+  } else {
+    status(
+      committed
+        ? '保存済み'
+        : '操作を確定できませんでした：' + errorMessage
+    );
+  }
+
+  return committed;
+}
 
   function isActive() {
     return !!save?.battle && save.battle.state === 'active';
