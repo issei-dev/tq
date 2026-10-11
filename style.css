@@ -61,35 +61,40 @@ button.danger {
 button:focus-visible,
 select:focus-visible {
   outline: 2px solid var(--gold);
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 
 .app {
   width: 100%;
   max-width: 540px;
   margin: 0 auto;
-  padding: 12px;
-  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  padding: 8px 12px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
 }
 
 .topbar,
-.progress-panel,
-.turn-row,
 .dialog-header,
+.turn-row,
 .button-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .topbar {
-  margin-bottom: 12px;
+  min-height: 40px;
+  margin-bottom: 6px;
+}
+
+.topbar button {
+  min-height: 40px;
+  padding: 7px 12px;
 }
 
 h1 {
   margin: 0;
-  font-size: 18px;
+  font-size: 17px;
 }
 
 h2 {
@@ -102,76 +107,128 @@ h3 {
   font-size: 15px;
 }
 
+.info-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  font-size: 11px;
+}
+
+#coins,
 .coins {
-  margin-top: 5px;
   color: var(--gold);
 }
 
-.muted {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.7;
+#coins,
+#stageLabel,
+#roundLabel {
+  white-space: nowrap;
 }
 
-.progress-panel {
-  min-height: 48px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
+#stageLabel {
+  font-size: 12px;
+}
+
+#areaLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
 }
 
 #roundLabel {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .arena {
-  min-height: 240px;
-  margin-top: 12px;
-  padding: 12px 7px;
-  border-radius: 18px;
-  background:
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+  margin-top: 8px;
+  padding: 8px 6px;
+  border-radius: 14px;
+  background-color: #111827;
+  background-image:
     radial-gradient(ellipse at 50% 85%, #353957, transparent 65%),
     linear-gradient(#192237, #101621);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 #warning {
-  min-height: 30px;
+  min-height: 0;
   margin-bottom: 6px;
   color: var(--gold);
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.4;
   text-align: center;
-  line-height: 1.5;
+  text-shadow: 0 1px 3px #000;
+}
+
+#warning:empty {
+  display: none;
 }
 
 #enemies {
-  width: 100%;
   display: flex;
+  align-items: center;
   justify-content: center;
-  align-items: flex-end;
-  gap: 5px;
+  gap: 6px;
+}
+
+#emptyArena {
+  padding: 36px 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.enemy,
+.character {
+  position: relative;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .enemy {
-  width: 32%;
-  padding: 7px 4px;
-  background: transparent;
-  border-color: transparent;
+  flex: 1 1 0;
+  max-width: 160px;
 }
 
-.enemy.single {
-  width: 70%;
-  max-width: 250px;
+.portrait-frame {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
 }
 
-.enemy.selected {
-  border-color: var(--blue);
-  background: #99baff0b;
+.enemy .portrait-frame {
+  aspect-ratio: 1 / 1;
+}
+
+.character .portrait-frame {
+  aspect-ratio: 3 / 4;
+}
+
+.enemy-image,
+.character-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
 }
 
 .enemy.dead,
@@ -179,30 +236,58 @@ h3 {
   opacity: 0.35;
 }
 
-.enemy-image {
-  display: block;
-  width: 100%;
-  height: 100px;
-  object-fit: contain;
+#party {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
 }
 
-.enemy.single .enemy-image {
-  height: 155px;
+.portrait-overlay {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 1;
+  padding: 18px 4px 4px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(8, 12, 22, 0.78) 30%,
+    rgba(8, 12, 22, 0.94) 100%
+  );
+  text-align: center;
+  text-shadow: 0 1px 3px #000;
+  pointer-events: none;
 }
 
-.enemy-name {
-  min-height: 30px;
-  margin-top: 5px;
+.overlay-name {
   font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
   overflow-wrap: anywhere;
 }
 
-.hp-bar {
-  height: 6px;
-  margin: 6px 0;
-  border-radius: 8px;
+.enemy .overlay-name {
+  display: -webkit-box;
   overflow: hidden;
-  background: #080c14;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 10px;
+}
+
+.overlay-meta {
+  margin-top: 2px;
+  color: #d3dded;
+  font-size: 9px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.hp-bar {
+  height: 4px;
+  margin: 4px 0 3px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #030609;
 }
 
 .hp-fill {
@@ -211,57 +296,43 @@ h3 {
 }
 
 .hp-text {
-  color: var(--muted);
-  font-size: 10px;
+  color: #ecf3ff;
+  font-size: 9px;
+  line-height: 1.15;
+  white-space: nowrap;
 }
 
-#party {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: 12px;
+.enemy.selected::after,
+.character.active::after,
+.character.heal-target::after {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  z-index: 3;
+  width: 0;
+  height: 0;
+  border-right: 6px solid transparent;
+  border-left: 6px solid transparent;
+  border-top: 8px solid var(--blue);
+  content: "";
+  transform: translateX(-50%);
+  filter: drop-shadow(0 1px 2px #000);
+  pointer-events: none;
 }
 
-.character {
-  min-width: 0;
-  padding: 6px 4px 8px;
-  background: var(--panel);
+.character.active::after {
+  border-top-color: var(--gold);
 }
 
-.character.active {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 1px var(--gold);
-}
-
-.character.heal-target {
-  border-color: var(--green);
-  box-shadow: 0 0 0 1px var(--green);
-}
-
-.character-image {
-  display: block;
-  width: 100%;
-  aspect-ratio: 3 / 4;
-  object-fit: contain;
-}
-
-.character-name {
-  margin-top: 5px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.character-info {
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 10px;
+.character.heal-target::after {
+  border-top-color: var(--green);
 }
 
 .turn-row {
-  min-height: 42px;
-  margin-top: 8px;
+  min-height: 32px;
+  margin-top: 4px;
   color: var(--gold);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 #cancelHeal {
@@ -273,39 +344,40 @@ h3 {
 .main-commands {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px;
 }
 
 #skills {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: 8px;
+  gap: 5px;
+  margin-top: 6px;
 }
 
 .skill {
-  min-height: 96px;
-  padding: 8px 5px;
+  min-height: 76px;
+  padding: 7px 5px;
 }
 
 .skill-name {
   display: block;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .skill-description {
   display: block;
-  margin-top: 6px;
+  margin-top: 4px;
   color: var(--muted);
-  font-size: 10px;
-  line-height: 1.5;
+  font-size: 9px;
+  line-height: 1.4;
 }
 
-.panel {
-  margin-top: 12px;
-  padding: 16px;
+.result-panel {
+  margin-top: 10px;
+  padding: 14px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--panel);
@@ -315,29 +387,37 @@ h3 {
 .result-title {
   margin-bottom: 8px;
   color: var(--gold);
-  font-size: 23px;
+  font-size: 22px;
   font-weight: 800;
 }
 
-.result-buttons {
+.result-buttons,
+.button-row {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 10px;
+}
+
+.result-buttons {
+  justify-content: center;
+}
+
+.button-row {
+  justify-content: flex-start;
 }
 
 .battle-log {
-  margin-top: 12px;
-  padding: 10px 12px;
+  margin-top: 8px;
+  padding: 9px 12px;
   border-radius: 12px;
   background: #090e18;
 }
 
 .battle-log summary {
   color: var(--muted);
-  cursor: pointer;
   font-size: 12px;
+  cursor: pointer;
 }
 
 #log {
@@ -350,10 +430,10 @@ h3 {
 }
 
 #status {
-  min-height: 22px;
-  margin-top: 8px;
+  min-height: 20px;
+  margin-top: 6px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   text-align: center;
   overflow-wrap: anywhere;
 }
@@ -378,6 +458,12 @@ dialog::backdrop {
   border-top: 1px solid var(--line);
 }
 
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
 .select-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -400,16 +486,6 @@ select {
   color: var(--text);
 }
 
-#encounterPreview {
-  margin-top: 10px;
-}
-
-.button-row {
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
-
 .member-panel {
   padding: 12px 0;
   border-bottom: 1px solid var(--line);
@@ -421,394 +497,21 @@ select {
 
 @media (max-width: 360px) {
   .app {
-    padding: 8px;
+    padding-right: 8px;
+    padding-left: 8px;
   }
 
-  #party {
-    gap: 4px;
-  }
-
-  .character-name {
-    font-size: 11px;
-  }
-
-  .hp-text {
-    font-size: 9px;
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .hp-fill {
-    transition: width 0.15s;
-  }
-}
-/* File: style.css */
-
-/* コンパクトなバトルUI。味方の画像・カードサイズは変更しない。 */
-
-.app {
-  padding-top: 8px;
-}
-
-.topbar {
-  margin-bottom: 8px;
-}
-
-.progress-panel {
-  min-height: 40px;
-  padding: 7px 10px;
-}
-
-/* 敵エリアの固定的な大きな余白を解除する。 */
-.arena {
-  min-height: 0;
-  margin-top: 8px;
-  padding: 8px 6px;
-  border-radius: 14px;
-}
-
-/* 予告がないときは、その分の空白もなくす。 */
-#warning {
-  min-height: 0;
-  margin-bottom: 5px;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-#warning:empty {
-  display: none;
-}
-
-/* 敵1体でも横幅を広げすぎない。 */
-.enemy {
-  padding: 5px 4px;
-}
-
-.enemy.single {
-  width: 58%;
-  max-width: 190px;
-}
-
-/* 敵画像だけを縮小する。味方画像には適用しない。 */
-.enemy-image {
-  height: 56px;
-}
-
-.enemy.single .enemy-image {
-  height: 72px;
-}
-
-.enemy-name {
-  min-height: 0;
-  margin-top: 3px;
-  font-size: 10px;
-  line-height: 1.35;
-}
-
-.enemy .hp-bar {
-  height: 5px;
-  margin: 4px 0;
-}
-
-.enemy .hp-text {
-  font-size: 10px;
-  line-height: 1.3;
-}
-
-#emptyArena {
-  padding: 24px 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-/* 味方のサイズは維持し、上下の間隔だけを調整する。 */
-#party {
-  margin-top: 8px;
-}
-
-.turn-row {
-  min-height: 34px;
-  margin-top: 5px;
-}
-
-.main-commands {
-  gap: 6px;
-}
-
-#skills {
-  gap: 5px;
-  margin-top: 6px;
-}
-
-/* 長い上位スキル名でも、文字を省略せず表示する。 */
-.skill {
-  min-height: 76px;
-  padding: 7px 5px;
-}
-
-.skill-name {
-  font-size: 10px;
-  line-height: 1.35;
-}
-
-.skill-description {
-  margin-top: 4px;
-  font-size: 9px;
-  line-height: 1.4;
-}
-
-.battle-log {
-  margin-top: 8px;
-}
-
-/* 縦の表示領域が小さい端末では、敵側をさらに縮める。 */
-@media (max-height: 700px) {
-  .enemy-image {
-    height: 44px;
-  }
-
-  .enemy.single .enemy-image {
-    height: 56px;
-  }
-
-  .arena {
-    padding-top: 6px;
-    padding-bottom: 6px;
-  }
-}
-/* File: style.css */
-
-/* ========================================
-   画像上にステータスを重ねるバトルUI
-   ======================================== */
-
-.topbar {
-  min-height: 40px;
-  margin-bottom: 6px;
-}
-
-.topbar h1 {
-  font-size: 17px;
-}
-
-.topbar button {
-  min-height: 40px;
-  padding: 7px 12px;
-}
-
-/* コイン・ステージ・エリア・ラウンドを1行に配置する。 */
-.compact-info {
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 7px 9px;
-  font-size: 11px;
-}
-
-.compact-info .coins {
-  margin: 0;
-  white-space: nowrap;
-  font-size: 11px;
-}
-
-.compact-info #stageLabel {
-  white-space: nowrap;
-  font-size: 12px;
-}
-
-.compact-info #areaLabel {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.compact-info #roundLabel {
-  white-space: nowrap;
-  font-size: 10px;
-}
-
-/* 敵エリア：画像下に別の情報スペースを設けない。 */
-.arena {
-  min-height: 0;
-  margin-top: 8px;
-  padding: 8px 6px;
-}
-
-#enemies {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-#warning {
-  min-height: 0;
-  margin-bottom: 6px;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-#warning:empty {
-  display: none;
-}
-
-/* 最大3体を均等幅にする。1体の場合も大きすぎない幅にする。 */
-.enemy,
-.enemy.single {
-  flex: 1 1 0;
-  width: auto;
-  min-width: 0;
-  max-width: 160px;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  background: #ffffff04;
-}
-
-.enemy.selected {
-  border-color: var(--blue);
-  background: #99baff0b;
-}
-
-/* 正方形の敵画像枠。 */
-.enemy .portrait-frame {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  overflow: hidden;
-}
-
-.enemy .enemy-image,
-.enemy.single .enemy-image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: center;
-}
-
-/* 味方カード：画像部分の幅と3:4比率を維持する。 */
-#party {
-  margin-top: 8px;
-}
-
-.character {
-  min-width: 0;
-  padding: 6px 4px 8px;
-  overflow: hidden;
-}
-
-.character .portrait-frame {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 3 / 4;
-  overflow: hidden;
-  border-radius: 7px;
-}
-
-.character .character-image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  aspect-ratio: auto;
-  object-fit: contain;
-  object-position: center;
-}
-
-/* 画像下部に重なる情報パネル。 */
-.portrait-overlay {
-  position: absolute;
-  inset: auto 0 0;
-  z-index: 1;
-  padding: 18px 4px 4px;
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    rgba(8, 12, 22, 0.78) 30%,
-    rgba(8, 12, 22, 0.94) 100%
-  );
-  text-align: center;
-  pointer-events: none;
-  text-shadow: 0 1px 3px #000;
-}
-
-.overlay-name {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1.2;
-  overflow-wrap: anywhere;
-}
-
-.overlay-meta {
-  margin-top: 2px;
-  color: #d3dded;
-  font-size: 9px;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.portrait-overlay .hp-bar {
-  height: 4px;
-  margin: 4px 0 3px;
-  background: #030609;
-}
-
-.portrait-overlay .hp-text {
-  color: #ecf3ff;
-  font-size: 9px;
-  line-height: 1.15;
-  white-space: nowrap;
-}
-
-/* 敵名は長くなるため、最大2行まで表示する。 */
-.enemy .overlay-name {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  font-size: 10px;
-}
-
-.enemy .overlay-meta {
-  font-size: 9px;
-}
-
-.turn-row {
-  min-height: 32px;
-  margin-top: 4px;
-}
-
-/* 前回の画面高による敵画像の固定高さを上書きする。 */
-@media (max-height: 700px) {
-  .enemy .enemy-image,
-  .enemy.single .enemy-image {
-    height: 100%;
-  }
-
-  .arena {
-    padding-top: 6px;
-    padding-bottom: 6px;
-  }
-}
-
-@media (max-width: 360px) {
-  .compact-info {
+  .info-row {
     gap: 5px;
     padding-right: 7px;
     padding-left: 7px;
   }
 
-  .compact-info .coins {
+  #coins {
     font-size: 10px;
   }
 
+  #party,
   #enemies {
     gap: 4px;
   }
@@ -818,149 +521,13 @@ select {
   }
 
   .overlay-meta,
-  .portrait-overlay .hp-text {
+  .hp-text {
     font-size: 8px;
   }
 }
-/* File: style.css */
 
-/* ========================================
-   フレームレス表示と敵エリア背景
-   ======================================== */
-
-/* 背景画像が未登録の場合の代替背景。 */
-.arena {
-  position: relative;
-  overflow: hidden;
-  background-color: #111827;
-  background-image:
-    radial-gradient(
-      ellipse at 50% 85%,
-      #353957,
-      transparent 65%
-    ),
-    linear-gradient(
-      #192237,
-      #101621
-    );
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-/* 敵のカード枠・塗りつぶし・内側余白を削除する。 */
-.enemy,
-.enemy.single,
-.enemy.selected {
-  position: relative;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-/* 正方形の表示枠は維持する。 */
-.enemy .portrait-frame {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  overflow: hidden;
-  border-radius: 0;
-}
-
-/* 画像を伸ばさず、枠内いっぱいに収める。 */
-.enemy .enemy-image,
-.enemy.single .enemy-image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: center;
-}
-
-/* 味方のカード枠・塗りつぶし・内側余白を削除する。 */
-.character,
-.character.active,
-.character.heal-target {
-  position: relative;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-/* 味方の3:4比率と4列配置は維持する。 */
-.character .portrait-frame {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 3 / 4;
-  overflow: hidden;
-  border-radius: 0;
-}
-
-.character .character-image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  aspect-ratio: auto;
-  object-fit: contain;
-  object-position: center;
-}
-
-/* 名前・属性・HPの半透明パネルは残す。 */
-.portrait-overlay {
-  border: 0;
-  border-radius: 0;
-}
-
-/* 敵の選択、味方の行動・回復対象を示すマーカー。 */
-.enemy.selected::after,
-.character.active::after,
-.character.heal-target::after {
-  position: absolute;
-  top: 3px;
-  left: 50%;
-  z-index: 3;
-  width: 0;
-  height: 0;
-  border-right: 6px solid transparent;
-  border-left: 6px solid transparent;
-  border-top: 8px solid var(--blue);
-  content: "";
-  transform: translateX(-50%);
-  pointer-events: none;
-  filter: drop-shadow(0 1px 2px #000);
-}
-
-/* 選択中の敵は青いマーカー。 */
-.enemy.selected::after {
-  border-top-color: var(--blue);
-}
-
-/* 行動中の味方は金色のマーカー。 */
-.character.active::after {
-  border-top-color: var(--gold);
-}
-
-/* 回復対象として選べる味方は緑色のマーカー。 */
-.character.heal-target::after {
-  border-top-color: var(--green);
-}
-
-/* キーボード操作時のフォーカス表示は維持する。 */
-.enemy:focus-visible,
-.character:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 2px;
-}
-
-/* 既存の画面高による固定高さ設定を上書きする。 */
-@media (max-height: 700px) {
-  .enemy .enemy-image,
-  .enemy.single .enemy-image {
-    height: 100%;
+@media (prefers-reduced-motion: no-preference) {
+  .hp-fill {
+    transition: width 0.15s;
   }
 }
