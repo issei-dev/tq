@@ -6,6 +6,7 @@
   const D = window.TQ_DATA;
   const C = window.TQ_COLLECTION;
   const U = window.TQ_SPIRIT_UPGRADE;
+  const CD = window.TQ_CHARACTER_DETAILS;
 
   const SAVE_KEY = 'towerquest.pages.save.v1';
   const BACKUP_KEY = 'towerquest.pages.before-collection.backup';
@@ -82,6 +83,66 @@
     spiritDuplicateShards: 1
   };
 
+  const REQUIRED_ELEMENT_IDS = [
+    'openManagement',
+    'closeManagement',
+    'management',
+    'coins',
+    'stageLabel',
+    'areaLabel',
+    'roundLabel',
+    'arena',
+    'enemies',
+    'emptyArena',
+    'warning',
+    'party',
+    'blessingStatus',
+    'commands',
+    'turnLabel',
+    'attack',
+    'defend',
+    'skills',
+    'cancelHeal',
+    'result',
+    'log',
+    'status',
+    'progressText',
+    'coinText',
+    'floorSelect',
+    'stageSelect',
+    'encounterPreview',
+    'startSelected',
+    'retreat',
+    'members',
+    'exportSave',
+    'importSave',
+    'saveFile',
+    'openCollection',
+    'openFormation',
+    'grantTestSpirit',
+    'collectionDialog',
+    'collectionTitle',
+    'closeCollection',
+    'showCharacters',
+    'showSpirits',
+    'collectionList',
+    'formationDialog',
+    'closeFormation',
+    'formationCharacters',
+    'formationSpirit',
+    'formationPreview',
+    'saveFormation'
+  ];
+
+  const BACKUP_DIALOG_IDS = [
+    'formationDialog',
+    'collectionDialog',
+    'gachaDialog',
+    'itemDialog',
+    'spiritUpgradeDialog',
+    'characterDetailsDialog'
+  ];
+
   let save = null;
   let busy = false;
   let fatal = false;
@@ -123,7 +184,11 @@
   }
 
   function status(text) {
-    $('status').textContent = text;
+    const target = $('status');
+
+    if (target) {
+      target.textContent = text;
+    }
   }
 
   function integer(value, min, max, label) {
@@ -171,6 +236,23 @@
     return value;
   }
 
+  function validateDOM() {
+    const missing = REQUIRED_ELEMENT_IDS.filter((id) => {
+      return !$(id);
+    });
+
+    if (missing.length > 0) {
+      throw new Error(
+        'index.htmlに必要な要素がありません：' +
+        missing.join(', ')
+      );
+    }
+
+    if (!document.querySelector('.app')) {
+      throw new Error('index.htmlに.app要素がありません。');
+    }
+  }
+
   function rankDefinition(rank) {
     const definition = D.rankDefinitions.find((entry) => {
       return entry.rank === rank;
@@ -185,10 +267,12 @@
 
   function skillFor(id, rank) {
     const definition = skills.get(id);
-    const variant = definition?.variants[rank - 1];
+    const variant = definition?.variants?.[rank - 1];
 
     if (!definition || !variant) {
-      throw new Error('ランク別スキル定義がありません。');
+      throw new Error(
+        'ランク別スキル定義がありません：' + id
+      );
     }
 
     return {
@@ -281,7 +365,9 @@
     const definition = characters.get(member.id);
 
     if (!definition) {
-      throw new Error('キャラクター定義がありません。');
+      throw new Error(
+        'キャラクター定義がありません：' + member.id
+      );
     }
 
     const multiplier = rankDefinition(member.rank).statMultiplier;
@@ -454,8 +540,10 @@
       }
 
       for (const variant of skill.variants) {
-        if (variant[property] !== undefined) {
-          result.push(variant[property]);
+        const value = variant[property] ?? skill[property];
+
+        if (value !== undefined) {
+          result.push(value);
         }
       }
     }
@@ -817,7 +905,11 @@
   function persist() {
     C.syncParty(save);
     save.updatedAt = new Date().toISOString();
-    localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+
+    localStorage.setItem(
+      SAVE_KEY,
+      JSON.stringify(save)
+    );
   }
 
   // --------------------------------------------------
@@ -829,6 +921,7 @@
       !D ||
       !C ||
       !U ||
+      !CD ||
       !D.rules ||
       !D.elements ||
       !D.balance ||
@@ -841,7 +934,8 @@
       !Array.isArray(D.encounters)
     ) {
       throw new Error(
-        'data.js・collection.js・spirit-upgrade.jsを確認してください。'
+        'data.js・collection.js・spirit-upgrade.js・' +
+        'character-details.jsの読み込みを確認してください。'
       );
     }
 
@@ -895,6 +989,10 @@
       throw new Error('戦闘バランス設定が不足しています。');
     }
 
+    if (!D.rules.levelExp || !D.rules.rewards) {
+      throw new Error('経験値または報酬設定がありません。');
+    }
+
     for (let rank = 1; rank <= D.rules.maxRank; rank += 1) {
       if (
         rankDefinition(rank).statMultiplier !==
@@ -915,13 +1013,18 @@
       if (
         !/^[a-zA-Z0-9_-]{1,64}$/.test(character.id) ||
         !D.elements[character.element] ||
+        !character.base ||
+        !character.growth ||
         !Array.isArray(character.skills) ||
         character.skills.length !== 3 ||
         !Array.isArray(character.jobs) ||
         character.jobs.length < D.rules.maxRank ||
         !Array.isArray(character.portraits)
       ) {
-        throw new Error('キャラクター設定が不足しています。');
+        throw new Error(
+          'キャラクター設定が不足しています：' +
+          character.id
+        );
       }
 
       for (const key of ['hp', 'atk', 'def']) {
@@ -954,7 +1057,7 @@
               'cover'
             ].includes(skill.type)
           ) {
-            throw new Error('未対応のスキル種別です。');
+            throw new Error('未対応のスキル種別です：' + id);
           }
 
           integer(skill.cooldown, 1, 1000, 'スキル待ち時間');
@@ -985,13 +1088,13 @@
 
     for (const id of D.initialParty) {
       if (!characters.has(id)) {
-        throw new Error('初期キャラクターがありません。');
+        throw new Error('初期キャラクターがありません：' + id);
       }
     }
 
     for (const enemy of D.enemies) {
       if (!D.elements[enemy.element]) {
-        throw new Error('敵の属性が不正です。');
+        throw new Error('敵の属性が不正です：' + enemy.id);
       }
 
       for (const key of ['hpRate', 'atkRate', 'defRate']) {
@@ -1052,7 +1155,9 @@
 
   function boot() {
     try {
+      validateDOM();
       validateMaster();
+      bindEvents();
       createExtraUI();
 
       C.init({
@@ -1065,6 +1170,14 @@
         getSave: () => save,
         isBlocked: () => busy || fatal,
         transact: (action) => transact(action)
+      });
+
+      CD.init({
+        getSave: () => save,
+        isBlocked: () => busy || fatal,
+        stats: (member) => stats(member),
+        skillFor: (id, rank) => skillFor(id, rank),
+        skillDescription: (skill) => skillDescription(skill)
       });
 
       const text = localStorage.getItem(SAVE_KEY);
@@ -1090,7 +1203,8 @@
           message = 'セーブを新仕様へ更新しました。';
 
           if (result.itemsMigrated) {
-            message += ' 旧ポーションは対応する2倍ポーションへ移行しました。';
+            message +=
+              ' 旧ポーションは対応する2倍ポーションへ移行しました。';
           }
 
           if (result.battleReset) {
@@ -1112,10 +1226,16 @@
       fatal = true;
       lockInput(true);
 
-      $('result').textContent =
-        '起動できませんでした。保存データは削除していません。';
+      const result = $('result');
+
+      if (result) {
+        result.hidden = false;
+        result.textContent =
+          '起動できませんでした。保存データは削除していません。';
+      }
 
       status('起動エラー：' + error.message);
+      console.error(error);
     }
   }
 
@@ -1148,6 +1268,7 @@
     }
 
     const before = clone(save);
+    const beforeSelectedEnemy = selectedEnemy;
 
     busy = true;
     fxQueue.length = 0;
@@ -1167,6 +1288,7 @@
         );
       }
 
+      // actionは同期処理として実行する。
       action();
 
       save.revision = safeAdd(
@@ -1192,6 +1314,7 @@
     } catch (error) {
       if (!committed) {
         save = before;
+        selectedEnemy = beforeSelectedEnemy;
       }
 
       message = error.message;
@@ -1199,12 +1322,25 @@
       fxQueue.length = 0;
       busy = false;
       lockInput(false);
-      render();
+
+      try {
+        render();
+      } catch (error) {
+        fatal = true;
+        lockInput(true);
+
+        message =
+          '画面更新に失敗しました。再読み込みしてください：' +
+          error.message;
+
+        console.error(error);
+      }
     }
 
     if (fatal) {
       status(
-        '別タブで保存データが変わりました。再読み込みしてください。'
+        message ||
+        '保存データが変わりました。再読み込みしてください。'
       );
     } else {
       status(
@@ -1331,8 +1467,8 @@
     const factor =
       D.balance.averageDamageFactors[reference.rank - 1];
 
-    // 敵の強さはステージ基準で固定。
-    // 精霊加護やポーションに連動させない。
+    // 敵の強さはステージ基準。
+    // 精霊加護・ポーション・現在のパーティには連動しない。
     const totalHp = value.atk * 4 * factor *
       targetRounds(info.floor, info.boss);
 
@@ -1938,7 +2074,7 @@
 
     const levelUps = [];
 
-    // 経験値を獲得するのは、出撃中の4人のみ。
+    // 経験値を獲得するのは出撃中の4人のみ。
     for (const member of save.party) {
       const before = member.level;
       grantExp(member, reward.exp);
@@ -2074,6 +2210,7 @@
     }
 
     const current = save.rewardBoosts[definition.type];
+
     const label = definition.type === 'exp'
       ? '経験値'
       : 'コイン';
@@ -2315,7 +2452,7 @@
   }
 
   // --------------------------------------------------
-  // 追加画面の生成
+  // ガチャ・アイテム画面生成
   // --------------------------------------------------
 
   function createExtraUI() {
@@ -2393,16 +2530,23 @@
       )
     );
 
+    const totalWeight = ITEM_DEFINITIONS.reduce((sum, item) => {
+      return sum + item.weight;
+    }, 0);
+
     for (const item of ITEM_DEFINITIONS) {
+      const withinItems = item.weight / totalWeight * 100;
+      const overall = withinItems * 0.6;
+
       rateList.append(
         node(
           'p',
           'muted',
           item.name +
           '：全体' +
-          (item.weight * 0.6).toFixed(0) +
+          overall.toFixed(0) +
           '％／アイテム枠内' +
-          item.weight +
+          withinItems.toFixed(0) +
           '％'
         )
       );
@@ -2485,7 +2629,7 @@
     };
 
     closeGacha.onclick = () => {
-      if (!busy) {
+      if (!busy && !fatal) {
         gachaDialog.close();
       }
     };
@@ -2500,7 +2644,7 @@
     };
 
     closeItems.onclick = () => {
-      if (!busy) {
+      if (!busy && !fatal) {
         itemDialog.close();
       }
     };
@@ -2803,6 +2947,55 @@
   // 全体画面更新
   // --------------------------------------------------
 
+  function restoreFixedButtons() {
+    const ids = [
+      'openManagement',
+      'closeManagement',
+      'exportSave',
+      'importSave',
+      'cancelHeal',
+      'openCollection',
+      'openFormation',
+      'closeCollection',
+      'closeFormation',
+      'showCharacters',
+      'showSpirits'
+    ];
+
+    for (const id of ids) {
+      $(id).disabled = false;
+    }
+  }
+
+  function restoreFormationButton() {
+    const selects =
+      $('formationCharacters').querySelectorAll('select');
+
+    const ids = Array.from(selects, (select) => {
+      return select.value;
+    });
+
+    const ownedIds = new Set(
+      save.ownedCharacters.map((entry) => entry.id)
+    );
+
+    const spiritId = $('formationSpirit').value || null;
+
+    const validSpirit = spiritId === null ||
+      save.ownedSpirits.some((entry) => {
+        return entry.id === spiritId;
+      });
+
+    $('saveFormation').disabled =
+      isActive() ||
+      busy ||
+      fatal ||
+      ids.length !== 4 ||
+      new Set(ids).size !== 4 ||
+      ids.some((id) => !ownedIds.has(id)) ||
+      !validSpirit;
+  }
+
   function render() {
     if (!save) {
       return;
@@ -2831,20 +3024,7 @@
         ? 'CLEAR'
         : 'R —';
 
-    // 全体ロックで無効化した固定ボタンを復元する。
-    for (const id of [
-      'openManagement',
-      'closeManagement',
-      'exportSave',
-      'importSave',
-      'cancelHeal',
-      'openCollection',
-      'openFormation',
-      'closeCollection',
-      'closeFormation'
-    ]) {
-      $(id).disabled = false;
-    }
+    restoreFixedButtons();
 
     renderBackground(index);
     renderEnemies();
@@ -2855,7 +3035,7 @@
 
     C.render();
 
-    // 戦闘の加護は、開始時に確定した値を表示する。
+    // 戦闘中・結果画面では、その戦闘開始時の加護を表示。
     if (battle) {
       $('blessingStatus').textContent = battle.blessing
         ? battle.blessing.name + '｜' + battle.blessing.text
@@ -2864,19 +3044,9 @@
 
     renderExtraUI();
     U.render();
+    CD.render();
 
-    // collection.js側の編成保存ボタンを復元する。
-    const formationSelects =
-      $('formationCharacters').querySelectorAll('select');
-
-    const ids = Array.from(formationSelects, (select) => {
-      return select.value;
-    });
-
-    $('saveFormation').disabled =
-      isActive() ||
-      ids.length !== 4 ||
-      new Set(ids).size !== 4;
+    restoreFormationButton();
 
     $('log').replaceChildren();
 
@@ -3504,7 +3674,7 @@
 
     link.href = url;
 
-    link.download = 'towerquest-spirit-upgrade-' +
+    link.download = 'towerquest-story-' +
       new Date().toISOString().slice(0, 10) +
       '.json';
 
@@ -3561,6 +3731,9 @@
         result.battleReset
           ? '旧戦闘途中データは解除します。'
           : '',
+        result.capped
+          ? '突破数を100へ補正します。'
+          : '',
         '',
         '読み込みますか？'
       ].filter(Boolean).join('\n');
@@ -3577,18 +3750,17 @@
       if (success) {
         lastGachaResults = [];
 
-        for (const id of [
-          'formationDialog',
-          'collectionDialog',
-          'gachaDialog',
-          'itemDialog',
-          'spiritUpgradeDialog'
-        ]) {
-          $(id).close();
+        for (const id of BACKUP_DIALOG_IDS) {
+          const dialog = $(id);
+
+          if (dialog?.open) {
+            dialog.close();
+          }
         }
 
         renderExtraUI();
         U.render();
+        CD.render();
       }
     } catch (error) {
       status('読み込みエラー：' + error.message);
@@ -3916,6 +4088,7 @@
         C.render();
         renderExtraUI();
         U.render();
+        CD.render();
 
         $('management').showModal();
       }
@@ -4016,6 +4189,5 @@
     });
   }
 
-  bindEvents();
   boot();
 })();
