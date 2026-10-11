@@ -14,12 +14,80 @@
   const clone = (value) => JSON.parse(JSON.stringify(value));
   const number = (value) => Number(value).toLocaleString('ja-JP');
 
+  const ITEM_DEFINITIONS = [
+    {
+      id: 'exp_potion_2',
+      name: '獲得経験値ポーション2倍',
+      type: 'exp',
+      multiplier: 2,
+      weight: 10
+    },
+    {
+      id: 'exp_potion_3',
+      name: '獲得経験値ポーション3倍',
+      type: 'exp',
+      multiplier: 3,
+      weight: 30
+    },
+    {
+      id: 'exp_potion_5',
+      name: '獲得経験値ポーション5倍',
+      type: 'exp',
+      multiplier: 5,
+      weight: 10
+    },
+    {
+      id: 'coin_potion_2',
+      name: '獲得コインポーション2倍',
+      type: 'coins',
+      multiplier: 2,
+      weight: 10
+    },
+    {
+      id: 'coin_potion_3',
+      name: '獲得コインポーション3倍',
+      type: 'coins',
+      multiplier: 3,
+      weight: 30
+    },
+    {
+      id: 'coin_potion_5',
+      name: '獲得コインポーション5倍',
+      type: 'coins',
+      multiplier: 5,
+      weight: 10
+    }
+  ];
+
+  const SPIRIT_DEFINITIONS = [
+    { id: 'luminaria', name: 'ルミナリア' },
+    { id: 'astraea', name: 'アストライア' },
+    { id: 'seraphiel', name: 'セラフィエル' },
+    { id: 'ignis', name: 'イグニス' },
+    { id: 'vulcan', name: 'ヴァルカン' },
+    { id: 'prometheus', name: 'プロメテウス' },
+    { id: 'aquaria', name: 'アクアリア' },
+    { id: 'leviathan', name: 'レヴィアタン' },
+    { id: 'celsius', name: 'セルシウス' },
+    { id: 'voltris', name: 'ボルトリス' },
+    { id: 'indra', name: 'インドラ' },
+    { id: 'fulgur', name: 'フルグル' }
+  ];
+
+  const GACHA = {
+    singleCost: 500,
+    elevenCost: 5000,
+    characterDuplicateShards: 1,
+    spiritDuplicateShards: 1
+  };
+
   let save = null;
   let busy = false;
   let fatal = false;
   let pendingHeal = null;
   let selectedEnemy = 0;
   let maxStage = 100;
+  let lastGachaResults = [];
 
   let characters = new Map();
   let enemies = new Map();
@@ -28,6 +96,7 @@
   const fxQueue = [];
   const referenceCache = new Map();
   const backgroundCache = new Map();
+
   let backgroundToken = 0;
 
   function node(tag, className, text) {
@@ -53,7 +122,11 @@
   }
 
   function integer(value, min, max, label) {
-    if (!Number.isSafeInteger(value) || value < min || value > max) {
+    if (
+      !Number.isSafeInteger(value) ||
+      value < min ||
+      value > max
+    ) {
       throw new Error(label + 'が不正です。');
     }
 
@@ -61,33 +134,47 @@
   }
 
   function finite(value, min, max, label) {
-    if (!Number.isFinite(value) || value < min || value > max) {
+    if (
+      !Number.isFinite(value) ||
+      value < min ||
+      value > max
+    ) {
       throw new Error(label + 'が不正です。');
     }
 
     return value;
   }
 
-  function rankDefinition(rank) {
-    const result = D.rankDefinitions.find((item) => item.rank === rank);
+  function safeAdd(a, b, label) {
+    const result = a + b;
 
-    if (!result) {
-      throw new Error('ランク定義がありません。');
-    }
+    integer(result, 0, Number.MAX_SAFE_INTEGER, label);
 
     return result;
   }
 
-  function skillFor(id, rank) {
-    const base = skills.get(id);
-    const variant = base?.variants[rank - 1];
+  function rankDefinition(rank) {
+    const definition = D.rankDefinitions.find((entry) => {
+      return entry.rank === rank;
+    });
 
-    if (!base || !variant) {
+    if (!definition) {
+      throw new Error('ランク定義がありません。');
+    }
+
+    return definition;
+  }
+
+  function skillFor(id, rank) {
+    const definition = skills.get(id);
+    const variant = definition?.variants[rank - 1];
+
+    if (!definition || !variant) {
       throw new Error('ランク別スキル定義がありません。');
     }
 
     return {
-      ...base,
+      ...definition,
       ...variant
     };
   }
@@ -103,7 +190,9 @@
         : '';
 
       const defense = skill.defenseScale !== undefined
-        ? '。敵DEFを' + Math.round(skill.defenseScale * 100) + '％で計算'
+        ? '。敵DEFを' +
+          Math.round(skill.defenseScale * 100) +
+          '％で計算'
         : '';
 
       return target + 'ATK×' + skill.power + hits + defense;
@@ -119,7 +208,8 @@
 
     if (skill.type === 'weaken') {
       return '次の敵フェーズの敵ATKを' +
-        Math.round((1 - skill.power) * 100) + '％低下';
+        Math.round((1 - skill.power) * 100) +
+        '％低下';
     }
 
     if (skill.type === 'mark') {
@@ -130,7 +220,9 @@
       const reduction = Math.round(skill.reduction * 100);
 
       return '次の自分の手番まで単体攻撃をかばう' +
-        (reduction ? '。単体被ダメージ' + reduction + '％軽減' : '');
+        (reduction
+          ? '。単体被ダメージ' + reduction + '％軽減'
+          : '');
     }
 
     return '';
@@ -152,8 +244,8 @@
   }
 
   function areaFor(index) {
-    const area = D.areas.find((item) => {
-      return index >= item.from && index <= item.to;
+    const area = D.areas.find((entry) => {
+      return index >= entry.from && index <= entry.to;
     });
 
     if (!area) {
@@ -199,12 +291,16 @@
 
     return {
       exp: Math.floor(
-        (config.expBase + config.expQuadratic * index * index) *
-        (boss ? config.bossExpMultiplier : 1)
+        (
+          config.expBase +
+          config.expQuadratic * index * index
+        ) * (boss ? config.bossExpMultiplier : 1)
       ),
       coins: Math.floor(
-        (config.coinBase + config.coinPerStage * index) *
-        (boss ? config.bossCoinMultiplier : 1)
+        (
+          config.coinBase +
+          config.coinPerStage * index
+        ) * (boss ? config.bossCoinMultiplier : 1)
       )
     };
   }
@@ -215,7 +311,7 @@
       return;
     }
 
-    member.exp += amount;
+    member.exp = safeAdd(member.exp, amount, '経験値');
 
     while (member.level < D.rules.maxLevel) {
       const required = neededExp(member.level);
@@ -234,7 +330,7 @@
   }
 
   function freshSave() {
-    return C.hydrate({
+    const result = C.hydrate({
       game: 'towerquest-pages',
       schemaVersion: SCHEMA_VERSION,
       revision: 0,
@@ -250,6 +346,14 @@
       battle: null,
       updatedAt: new Date().toISOString()
     });
+
+    result.itemSystemVersion = 1;
+    result.rewardBoosts = {
+      exp: 1,
+      coins: 1
+    };
+
+    return result;
   }
 
   function validateParty(raw, oldRanks) {
@@ -260,13 +364,22 @@
     const seen = new Set();
 
     return raw.map((member) => {
-      if (!member || !characters.has(member.id) || seen.has(member.id)) {
+      if (
+        !member ||
+        !characters.has(member.id) ||
+        seen.has(member.id)
+      ) {
         throw new Error('パーティのキャラクターが不正です。');
       }
 
       seen.add(member.id);
 
-      const level = integer(member.level, 1, D.rules.maxLevel, 'レベル');
+      const level = integer(
+        member.level,
+        1,
+        D.rules.maxLevel,
+        'レベル'
+      );
 
       let rank = integer(
         member.rank,
@@ -279,11 +392,19 @@
         rank = 1 + Math.ceil((rank - 1) / 2);
       }
 
-      const exp = integer(member.exp, 0, Number.MAX_SAFE_INTEGER, '経験値');
+      const exp = integer(
+        member.exp,
+        0,
+        Number.MAX_SAFE_INTEGER,
+        '経験値'
+      );
 
       if (
         (level === D.rules.maxLevel && exp !== 0) ||
-        (level < D.rules.maxLevel && exp >= neededExp(level))
+        (
+          level < D.rules.maxLevel &&
+          exp >= neededExp(level)
+        )
       ) {
         throw new Error('レベルと経験値が一致しません。');
       }
@@ -324,7 +445,12 @@
       throw new Error('戦闘状態が不正です。');
     }
 
-    const index = integer(raw.index, 1, maxStage, '戦闘ステージ');
+    const index = integer(
+      raw.index,
+      1,
+      maxStage,
+      '戦闘ステージ'
+    );
 
     integer(raw.round, 1, 1000000, 'ラウンド');
     integer(raw.actor, 0, 3, '行動者');
@@ -357,7 +483,9 @@
       rewards: null,
       blessing: null,
       log: Array.isArray(raw.log)
-        ? raw.log.slice(-40).map((line) => String(line).slice(0, 300))
+        ? raw.log.slice(-40).map((line) => {
+            return String(line).slice(0, 300);
+          })
         : [],
       allies: [],
       enemies: []
@@ -367,7 +495,11 @@
       const member = party[i];
       const definition = characters.get(member.id);
 
-      if (!ally || ally.id !== member.id || ally.rank !== member.rank) {
+      if (
+        !ally ||
+        ally.id !== member.id ||
+        ally.rank !== member.rank
+      ) {
         throw new Error('戦闘中のパーティが一致しません。');
       }
 
@@ -385,7 +517,9 @@
         !Array.isArray(ally.usedSkills) ||
         ally.cooldowns.length !== definition.skills.length ||
         ally.usedSkills.length !== definition.skills.length ||
-        !ally.usedSkills.every((value) => typeof value === 'boolean')
+        !ally.usedSkills.every((value) => {
+          return typeof value === 'boolean';
+        })
       ) {
         throw new Error('味方のスキル状態が不正です。');
       }
@@ -444,7 +578,11 @@
 
     if (
       battle.state === 'active' &&
-      (!alliesAlive || !enemiesAlive || battle.allies[battle.actor].hp <= 0)
+      (
+        !alliesAlive ||
+        !enemiesAlive ||
+        battle.allies[battle.actor].hp <= 0
+      )
     ) {
       throw new Error('進行中の戦闘状態が不正です。');
     }
@@ -454,15 +592,38 @@
     }
 
     if (battle.state === 'won') {
-      if (!alliesAlive || enemiesAlive || cleared < index || !raw.rewards) {
+      if (
+        !alliesAlive ||
+        enemiesAlive ||
+        cleared < index ||
+        !raw.rewards
+      ) {
         throw new Error('勝利状態が不正です。');
       }
 
       battle.rewards = {
-        exp: integer(raw.rewards.exp, 0, Number.MAX_SAFE_INTEGER, '報酬経験値'),
-        coins: integer(raw.rewards.coins, 0, Number.MAX_SAFE_INTEGER, '報酬コイン'),
+        exp: integer(
+          raw.rewards.exp,
+          0,
+          Number.MAX_SAFE_INTEGER,
+          '報酬経験値'
+        ),
+        coins: integer(
+          raw.rewards.coins,
+          0,
+          Number.MAX_SAFE_INTEGER,
+          '報酬コイン'
+        ),
+        expMultiplier: validateMultiplier(
+          raw.rewards.expMultiplier ?? 1
+        ),
+        coinMultiplier: validateMultiplier(
+          raw.rewards.coinMultiplier ?? 1
+        ),
         levelUps: Array.isArray(raw.rewards.levelUps)
-          ? raw.rewards.levelUps.map((text) => String(text).slice(0, 100))
+          ? raw.rewards.levelUps.map((text) => {
+              return String(text).slice(0, 100);
+            })
           : []
       };
     }
@@ -479,6 +640,62 @@
     }
 
     return battle;
+  }
+
+  function validateMultiplier(value) {
+    if (![1, 2, 3, 5].includes(value)) {
+      throw new Error('ポーション倍率が不正です。');
+    }
+
+    return value;
+  }
+
+  function hydrateItemSystem(value, raw) {
+    if (
+      raw.itemSystemVersion !== undefined &&
+      raw.itemSystemVersion !== 1
+    ) {
+      throw new Error('対応していないアイテム形式です。');
+    }
+
+    let migrated = raw.itemSystemVersion === undefined;
+
+    value.itemSystemVersion = 1;
+
+    value.rewardBoosts = {
+      exp: validateMultiplier(raw.rewardBoosts?.exp ?? 1),
+      coins: validateMultiplier(raw.rewardBoosts?.coins ?? 1)
+    };
+
+    const oldIds = {
+      exp_boost_potion: 'exp_potion_2',
+      coin_boost_potion: 'coin_potion_2'
+    };
+
+    const merged = new Map();
+
+    for (const item of value.items) {
+      const id = oldIds[item.id] || item.id;
+
+      if (id !== item.id) {
+        migrated = true;
+      }
+
+      const quantity = safeAdd(
+        merged.get(id) || 0,
+        item.quantity,
+        'アイテム数量'
+      );
+
+      merged.set(id, quantity);
+    }
+
+    value.items = Array.from(merged, ([id, quantity]) => ({
+      id,
+      quantity
+    }));
+
+    return migrated;
   }
 
   function normalizeSave(raw) {
@@ -515,7 +732,12 @@
 
     const selected = migrated
       ? Math.min(cleared + 1, maxStage)
-      : integer(raw.selectedStage, 1, maxStage, '選択ステージ');
+      : integer(
+          raw.selectedStage,
+          1,
+          maxStage,
+          '選択ステージ'
+        );
 
     if (selected > Math.min(cleared + 1, maxStage)) {
       throw new Error('選択ステージが未解放です。');
@@ -526,8 +748,18 @@
       schemaVersion: SCHEMA_VERSION,
       revision: gas
         ? 0
-        : integer(raw.revision ?? 0, 0, Number.MAX_SAFE_INTEGER, '保存番号'),
-      coins: integer(raw.coins, 0, Number.MAX_SAFE_INTEGER, 'コイン'),
+        : integer(
+            raw.revision ?? 0,
+            0,
+            Number.MAX_SAFE_INTEGER,
+            '保存番号'
+          ),
+      coins: integer(
+        raw.coins,
+        0,
+        Number.MAX_SAFE_INTEGER,
+        'コイン'
+      ),
       highestCleared: cleared,
       selectedStage: selected,
       party,
@@ -536,9 +768,13 @@
     };
 
     const value = C.hydrate(base, oldRanks ? base : raw);
+    const itemsMigrated = hydrateItemSystem(value, raw);
 
     const battleReset = !!raw.battle &&
-      (migrated || raw.battle.version !== D.battleVersion);
+      (
+        migrated ||
+        raw.battle.version !== D.battleVersion
+      );
 
     value.battle = migrated
       ? null
@@ -547,6 +783,7 @@
     return {
       migrated,
       collectionMigrated: raw.collectionVersion === undefined,
+      itemsMigrated,
       battleReset,
       capped: originalCleared > maxStage,
       value
@@ -571,22 +808,38 @@
       !Array.isArray(D.initialParty) ||
       !Array.isArray(D.areas) ||
       !Array.isArray(D.encounters) ||
-      !D.balance
+      !D.balance ||
+      !D.elements
     ) {
       throw new Error('data.jsまたはcollection.jsを読み込めません。');
     }
 
-    integer(D.rules.floors, 1, 100, '階層数');
-    integer(D.rules.stagesPerFloor, 1, 100, 'ステージ数');
-    integer(D.rules.maxLevel, 1, 999, '最大レベル');
-    integer(D.rules.maxRank, 1, D.rankDefinitions.length, '最大ランク');
+    if (
+      D.rules.floors !== 10 ||
+      D.rules.stagesPerFloor !== 10 ||
+      D.rules.maxLevel !== 99 ||
+      D.rules.maxRank !== 3
+    ) {
+      throw new Error(
+        'data.jsは全10階・各10ステージ・Lv99・ランク3版を使用してください。'
+      );
+    }
+
     integer(D.battleVersion, 1, 1000000, '戦闘バージョン');
 
     maxStage = D.rules.floors * D.rules.stagesPerFloor;
 
-    characters = new Map(D.characters.map((entry) => [entry.id, entry]));
-    enemies = new Map(D.enemies.map((entry) => [entry.id, entry]));
-    skills = new Map(D.skills.map((entry) => [entry.id, entry]));
+    characters = new Map(
+      D.characters.map((entry) => [entry.id, entry])
+    );
+
+    enemies = new Map(
+      D.enemies.map((entry) => [entry.id, entry])
+    );
+
+    skills = new Map(
+      D.skills.map((entry) => [entry.id, entry])
+    );
 
     if (
       characters.size !== D.characters.length ||
@@ -596,12 +849,21 @@
       throw new Error('マスターに重複IDがあります。');
     }
 
-    if (D.initialParty.length !== 4 || new Set(D.initialParty).size !== 4) {
+    if (
+      D.initialParty.length !== 4 ||
+      new Set(D.initialParty).size !== 4
+    ) {
       throw new Error('初期パーティは異なる4人を指定してください。');
     }
 
     for (let rank = 1; rank <= D.rules.maxRank; rank += 1) {
-      finite(rankDefinition(rank).statMultiplier, 1, 1000000, 'ランク倍率');
+      if (
+        rankDefinition(rank).statMultiplier !==
+        Math.pow(4, rank - 1)
+      ) {
+        throw new Error('ランク倍率は1・4・16にしてください。');
+      }
+
       finite(
         D.balance.averageDamageFactors[rank - 1],
         0.01,
@@ -612,6 +874,7 @@
 
     for (const character of D.characters) {
       if (
+        !/^[a-zA-Z0-9_-]{1,64}$/.test(character.id) ||
         !D.elements[character.element] ||
         !Array.isArray(character.skills) ||
         character.skills.length !== 3 ||
@@ -629,12 +892,32 @@
           1000000,
           '初期ステータス'
         );
-        integer(character.growth[key], 0, 1000000, '成長量');
+
+        integer(
+          character.growth[key],
+          0,
+          1000000,
+          '成長量'
+        );
       }
 
       for (const id of character.skills) {
         for (let rank = 1; rank <= D.rules.maxRank; rank += 1) {
           const skill = skillFor(id, rank);
+
+          if (
+            ![
+              'damage',
+              'heal',
+              'buff',
+              'weaken',
+              'mark',
+              'cover'
+            ].includes(skill.type)
+          ) {
+            throw new Error('未対応のスキル種別です。');
+          }
+
           integer(skill.cooldown, 1, 1000, 'スキル待ち時間');
 
           if (skill.type === 'cover') {
@@ -650,7 +933,12 @@
           }
 
           if (skill.defenseScale !== undefined) {
-            finite(skill.defenseScale, 0, 1, '防御参照倍率');
+            finite(
+              skill.defenseScale,
+              0,
+              1,
+              '防御参照倍率'
+            );
           }
         }
       }
@@ -682,17 +970,33 @@
         ids.length > 3 ||
         ids.some((id) => !enemies.has(id))
       ) {
-        throw new Error('敵の出現設定が不正です：' + stageName(index));
+        throw new Error(
+          '敵の出現設定が不正です：' + stageName(index)
+        );
       }
 
       const info = stageInfo(index);
-      targetRounds(info.floor, info.boss);
+
+      finite(
+        targetRounds(info.floor, info.boss),
+        0.1,
+        1000,
+        '想定ラウンド数'
+      );
+
+      integer(neededExp(index), 1, Number.MAX_SAFE_INTEGER, '必要経験値');
+
+      const reward = rewardFor(index);
+
+      integer(reward.exp, 0, Number.MAX_SAFE_INTEGER, '基本経験値');
+      integer(reward.coins, 0, Number.MAX_SAFE_INTEGER, '基本コイン');
     }
   }
 
   function boot() {
     try {
       validateMaster();
+      createExtraUI();
 
       C.init({
         getSave: () => save,
@@ -710,23 +1014,24 @@
         if (
           result.migrated ||
           result.collectionMigrated ||
+          result.itemsMigrated ||
           result.battleReset
         ) {
           if (!localStorage.getItem(BACKUP_KEY)) {
             localStorage.setItem(BACKUP_KEY, text);
           }
 
-          save.revision += 1;
+          save.revision = safeAdd(save.revision, 1, '保存番号');
           persist();
 
-          message = '所持・編成データを含む仕様へセーブを更新しました';
+          message = 'セーブを更新しました。旧ポーションは2倍へ移行しました。';
 
           if (result.battleReset) {
-            message += '。旧戦闘途中データは解除しました';
+            message += ' 旧戦闘途中データは解除しました。';
           }
 
           if (result.capped) {
-            message += '。突破数は100へ補正しました';
+            message += ' 突破数は100へ補正しました。';
           }
         }
       } else {
@@ -734,20 +1039,22 @@
         persist();
       }
 
-      $('openManagement').disabled = false;
       render();
       status(message);
     } catch (error) {
       fatal = true;
-      $('openManagement').disabled = true;
+      lockInput(true);
+
       $('result').textContent =
         '起動できませんでした。保存データは削除していません。';
+
       status('起動エラー：' + error.message);
     }
   }
 
   function lockInput(locked) {
     const app = document.querySelector('.app');
+
     app.classList.toggle('is-animating', locked);
     app.setAttribute('aria-busy', String(locked));
 
@@ -779,11 +1086,14 @@
       const disk = JSON.parse(localStorage.getItem(SAVE_KEY));
 
       if (!disk || disk.revision !== save.revision) {
-        throw new Error('別タブで進行が変わりました。再読み込みしてください。');
+        throw new Error(
+          '別タブで進行が変わりました。再読み込みしてください。'
+        );
       }
 
       action();
-      save.revision = before.revision + 1;
+
+      save.revision = safeAdd(before.revision, 1, '保存番号');
       persist();
       pendingHeal = null;
       committed = true;
@@ -811,7 +1121,9 @@
     }
 
     if (fatal) {
-      status('別タブで保存データが変わりました。再読み込みしてください。');
+      status(
+        '別タブで保存データが変わりました。再読み込みしてください。'
+      );
     } else {
       status(
         committed
@@ -824,7 +1136,7 @@
   }
 
   function isActive() {
-    return !!save?.battle && save.battle.state === 'active';
+    return save?.battle?.state === 'active';
   }
 
   function referenceMember(index) {
@@ -881,7 +1193,9 @@
       return override.enemies;
     }
 
-    const group = D.encounters.find((entry) => entry.floor === info.floor);
+    const group = D.encounters.find((entry) => {
+      return entry.floor === info.floor;
+    });
 
     if (!group) {
       throw new Error('階層の敵設定がありません。');
@@ -900,6 +1214,7 @@
           : 4;
 
     const pool = group.normal.slice(0, unlocked);
+
     const count = info.floor <= 2
       ? 1
       : info.stage % 3 === 0
@@ -916,7 +1231,9 @@
     const ids = encounterIds(index);
     const reference = referenceMember(index);
     const value = stats(reference);
-    const override = D.stageOverrides?.[stageName(index)] || {};
+
+    const override =
+      D.stageOverrides?.[stageName(index)] || {};
 
     const hpMultiplier = override.hpMultiplier ?? 1;
     const atkMultiplier = override.atkMultiplier ?? 1;
@@ -924,7 +1241,9 @@
     finite(hpMultiplier, 0.01, 100, '敵HP補正');
     finite(atkMultiplier, 0.01, 100, '敵ATK補正');
 
-    const factor = D.balance.averageDamageFactors[reference.rank - 1];
+    const factor =
+      D.balance.averageDamageFactors[reference.rank - 1];
+
     const totalHp = value.atk * 4 * factor *
       targetRounds(info.floor, info.boss);
 
@@ -934,7 +1253,12 @@
 
       const maxHp = Math.max(
         1,
-        Math.floor(totalHp / ids.length * definition.hpRate * hpMultiplier)
+        Math.floor(
+          totalHp /
+          ids.length *
+          definition.hpRate *
+          hpMultiplier
+        )
       );
 
       return {
@@ -948,14 +1272,20 @@
           Math.floor(
             (
               value.def / 2 +
-              value.hp * (info.boss ? 0.14 : 0.09) / ids.length
-            ) * definition.atkRate * atkMultiplier
+              value.hp *
+              (info.boss ? 0.14 : 0.09) /
+              ids.length
+            ) *
+            definition.atkRate *
+            atkMultiplier
           )
         ),
         def: Math.max(
           1,
           Math.floor(
-            value.atk * (info.boss ? 0.4 : 0.22) * definition.defRate
+            value.atk *
+            (info.boss ? 0.4 : 0.22) *
+            definition.defRate
           )
         ),
         mark: 1,
@@ -980,6 +1310,7 @@
     selectedEnemy = 0;
 
     const spirit = C.equippedSpirit(save);
+
     const blessing = spirit
       ? {
           name: spirit.name + ' R' + spirit.rank,
@@ -996,7 +1327,10 @@
       rewards: null,
       blessing,
       log: [
-        stageName(index) + '／' + areaFor(index).name + '：戦闘開始'
+        stageName(index) +
+        '／' +
+        areaFor(index).name +
+        '：戦闘開始'
       ],
       allies: save.party.map((member) => {
         const value = stats(member);
@@ -1022,6 +1356,13 @@
 
     if (blessing) {
       addLog(blessing.name + '：' + blessing.text);
+    }
+
+    if (
+      save.rewardBoosts.exp > 1 ||
+      save.rewardBoosts.coins > 1
+    ) {
+      addLog('報酬効果：' + boostText());
     }
   }
 
@@ -1078,6 +1419,7 @@
     }
 
     const definition = characters.get(actor.id);
+
     const base = Math.max(
       1,
       actor.atk * power - enemy.def * defenseScale / 2
@@ -1096,7 +1438,13 @@
     enemy.mark = 1;
     enemy.hp = Math.max(0, enemy.hp - amount);
 
-    addLog(definition.name + ' → ' + enemy.name + '：' + number(amount));
+    addLog(
+      definition.name +
+      ' → ' +
+      enemy.name +
+      '：' +
+      number(amount)
+    );
 
     queueFx({
       kind: 'damage',
@@ -1110,9 +1458,13 @@
 
   function useSkill(actor, slot, allyIndex) {
     const definition = characters.get(actor.id);
+
     integer(slot, 0, definition.skills.length - 1, 'スキル');
 
-    if (actor.cooldowns[slot] > 0 || actor.usedSkills[slot]) {
+    if (
+      actor.cooldowns[slot] > 0 ||
+      actor.usedSkills[slot]
+    ) {
       throw new Error('そのスキルは使用できません。');
     }
 
@@ -1149,6 +1501,7 @@
       }
     } else if (skill.type === 'heal') {
       integer(allyIndex, 0, 3, '回復対象');
+
       const target = battle.allies[allyIndex];
 
       if (target.hp <= 0) {
@@ -1165,8 +1518,12 @@
       const amount = target.hp - before;
 
       addLog(
-        skill.name + '：' + characters.get(target.id).name +
-        'を' + number(amount) + '回復'
+        skill.name +
+        '：' +
+        characters.get(target.id).name +
+        'を' +
+        number(amount) +
+        '回復'
       );
 
       queueFx({
@@ -1176,7 +1533,10 @@
         element: definition.element,
         amount
       });
-    } else if (skill.type === 'buff' || skill.type === 'cover') {
+    } else if (
+      skill.type === 'buff' ||
+      skill.type === 'cover'
+    ) {
       if (skill.type === 'buff') {
         actor.attackBuff = skill.power;
       } else {
@@ -1213,6 +1573,7 @@
       }
 
       enemy.mark = skill.power;
+
       addLog(skill.name + '：' + enemy.name + 'に光の印');
 
       queueFx({
@@ -1236,6 +1597,7 @@
 
     const battle = save.battle;
     const actor = battle.allies[battle.actor];
+
     let endTurn = false;
 
     if (command === 'attack') {
@@ -1249,6 +1611,7 @@
       endTurn = true;
     } else if (command === 'defend') {
       actor.defense = true;
+
       addLog(characters.get(actor.id).name + 'は防御した');
 
       queueFx({
@@ -1278,7 +1641,10 @@
     actor.coverReduction = 0;
     actor.attackBuff = 1;
     actor.usedSkills.fill(false);
-    actor.cooldowns = actor.cooldowns.map((value) => Math.max(0, value - 1));
+
+    actor.cooldowns = actor.cooldowns.map((value) => {
+      return Math.max(0, value - 1);
+    });
   }
 
   function nextActor() {
@@ -1299,16 +1665,24 @@
 
     if (battle.state === 'active') {
       battle.round += 1;
-      battle.actor = battle.allies.findIndex((ally) => ally.hp > 0);
+
+      battle.actor = battle.allies.findIndex((ally) => {
+        return ally.hp > 0;
+      });
+
       beginTurn(battle.allies[battle.actor]);
     }
   }
 
   function damageAlly(enemy, target, power, enraged, single) {
     const definition = characters.get(target.id);
+
     const base = Math.max(
       1,
-      enemy.atk * enemy.weaken * power * (enraged ? 1.15 : 1) -
+      enemy.atk *
+      enemy.weaken *
+      power *
+      (enraged ? 1.15 : 1) -
       target.def / 2
     );
 
@@ -1328,7 +1702,13 @@
 
     target.hp = Math.max(0, target.hp - amount);
 
-    addLog(enemy.name + ' → ' + definition.name + '：' + number(amount));
+    addLog(
+      enemy.name +
+      ' → ' +
+      definition.name +
+      '：' +
+      number(amount)
+    );
 
     queueFx({
       kind: 'damage',
@@ -1390,7 +1770,10 @@
 
     if (battle.allies.every((ally) => ally.hp <= 0)) {
       battle.state = 'lost';
-      addLog('全滅。育成・コイン・突破済みステージは維持されます。');
+
+      addLog(
+        '全滅。育成・コイン・突破状況・ポーション効果は維持されます。'
+      );
     }
   }
 
@@ -1401,18 +1784,41 @@
       return;
     }
 
-    const reward = rewardFor(battle.index);
+    const base = rewardFor(battle.index);
 
-    if (!Number.isSafeInteger(save.coins + reward.coins)) {
-      throw new Error('コインの保存上限です。');
-    }
+    const expMultiplier = save.rewardBoosts.exp;
+    const coinMultiplier = save.rewardBoosts.coins;
 
-    save.coins += reward.coins;
-    save.highestCleared = Math.max(save.highestCleared, battle.index);
+    const reward = {
+      exp: integer(
+        base.exp * expMultiplier,
+        0,
+        Number.MAX_SAFE_INTEGER,
+        '獲得経験値'
+      ),
+      coins: integer(
+        base.coins * coinMultiplier,
+        0,
+        Number.MAX_SAFE_INTEGER,
+        '獲得コイン'
+      ),
+      expMultiplier,
+      coinMultiplier
+    };
+
+    save.coins = safeAdd(
+      save.coins,
+      reward.coins,
+      'コイン'
+    );
+
+    save.highestCleared = Math.max(
+      save.highestCleared,
+      battle.index
+    );
 
     const levelUps = [];
 
-    // 経験値を獲得するのは出撃中の4人だけ。
     for (const member of save.party) {
       const before = member.level;
       grantExp(member, reward.exp);
@@ -1420,21 +1826,42 @@
       if (member.level > before) {
         levelUps.push(
           characters.get(member.id).name +
-          ' Lv.' + before + ' → ' + member.level
+          ' Lv.' +
+          before +
+          ' → ' +
+          member.level
         );
       }
     }
 
     battle.state = 'won';
+
     battle.rewards = {
       ...reward,
       levelUps
     };
 
     addLog(
-      '勝利！ EXP +' + number(reward.exp) +
-      ' / COIN +' + number(reward.coins)
+      '勝利！ EXP +' +
+      number(reward.exp) +
+      ' / COIN +' +
+      number(reward.coins)
     );
+
+    if (expMultiplier > 1 || coinMultiplier > 1) {
+      addLog(
+        'ポーション適用：経験値×' +
+        expMultiplier +
+        '／コイン×' +
+        coinMultiplier +
+        '。効果を消費しました。'
+      );
+    }
+
+    save.rewardBoosts = {
+      exp: 1,
+      coins: 1
+    };
   }
 
   function reincarnate(id) {
@@ -1453,6 +1880,608 @@
     member.level = 1;
     member.exp = 0;
     save.battle = null;
+  }
+
+  function boostText() {
+    return '経験値×' +
+      save.rewardBoosts.exp +
+      '／コイン×' +
+      save.rewardBoosts.coins;
+  }
+
+  function itemDefinition(id) {
+    return ITEM_DEFINITIONS.find((entry) => entry.id === id);
+  }
+
+  function itemLabel(id) {
+    const definition = itemDefinition(id);
+
+    if (definition) {
+      return definition.name;
+    }
+
+    const prefix = 'character_shard_';
+
+    if (id.startsWith(prefix)) {
+      const characterId = id.slice(prefix.length);
+      const character = characters.get(characterId);
+
+      return (character?.name || characterId) + 'の欠片';
+    }
+
+    return id;
+  }
+
+  function addItem(id, amount) {
+    let item = save.items.find((entry) => entry.id === id);
+
+    if (!item) {
+      item = {
+        id,
+        quantity: 0
+      };
+
+      save.items.push(item);
+    }
+
+    item.quantity = safeAdd(
+      item.quantity,
+      amount,
+      'アイテム数量'
+    );
+  }
+
+  async function usePotion(id) {
+    if (busy || fatal || isActive()) {
+      return;
+    }
+
+    const definition = itemDefinition(id);
+
+    if (!definition) {
+      return;
+    }
+
+    const current = save.rewardBoosts[definition.type];
+    const label = definition.type === 'exp' ? '経験値' : 'コイン';
+
+    const lines = [
+      definition.name + 'を1個使用しますか？',
+      '次の勝利1回の獲得' + label + 'が' +
+        definition.multiplier + '倍になります。',
+      '敗北・撤退では効果を消費しません。'
+    ];
+
+    if (current > 1) {
+      lines.push(
+        '現在の' +
+        current +
+        '倍効果は上書きされます。倍率は重複しません。'
+      );
+    }
+
+    if (!confirm(lines.join('\n'))) {
+      return;
+    }
+
+    await transact(() => {
+      if (isActive()) {
+        throw new Error('戦闘中はポーションを使用できません。');
+      }
+
+      const item = save.items.find((entry) => entry.id === id);
+
+      if (!item || item.quantity < 1) {
+        throw new Error('ポーションを所持していません。');
+      }
+
+      item.quantity -= 1;
+      save.rewardBoosts[definition.type] = definition.multiplier;
+    });
+  }
+
+  function randomInt(max) {
+    integer(max, 1, 4294967296, '抽選範囲');
+
+    if (!window.crypto?.getRandomValues) {
+      throw new Error('この環境では抽選用乱数を利用できません。');
+    }
+
+    const buffer = new Uint32Array(1);
+    const limit = Math.floor(4294967296 / max) * max;
+
+    do {
+      window.crypto.getRandomValues(buffer);
+    } while (buffer[0] >= limit);
+
+    return buffer[0] % max;
+  }
+
+  function choose(list) {
+    if (!Array.isArray(list) || list.length === 0) {
+      throw new Error('抽選対象が登録されていません。');
+    }
+
+    return list[randomInt(list.length)];
+  }
+
+  function weightedItem() {
+    const total = ITEM_DEFINITIONS.reduce((sum, entry) => {
+      return sum + entry.weight;
+    }, 0);
+
+    let roll = randomInt(total);
+
+    for (const item of ITEM_DEFINITIONS) {
+      if (roll < item.weight) {
+        return item;
+      }
+
+      roll -= item.weight;
+    }
+
+    throw new Error('アイテム抽選に失敗しました。');
+  }
+
+  function characterPool() {
+    return D.characters.filter((entry) => {
+      return entry.gachaEnabled !== false;
+    });
+  }
+
+  function drawOne() {
+    const category = randomInt(100);
+
+    if (category < 60) {
+      const item = weightedItem();
+      addItem(item.id, 1);
+
+      return {
+        category: 'アイテム',
+        name: item.name,
+        message: '1個獲得',
+        isNew: false
+      };
+    }
+
+    if (category < 90) {
+      const character = choose(characterPool());
+
+      const owned = save.ownedCharacters.some((entry) => {
+        return entry.id === character.id;
+      });
+
+      if (owned) {
+        addItem(
+          'character_shard_' + character.id,
+          GACHA.characterDuplicateShards
+        );
+
+        return {
+          category: 'キャラクター',
+          name: character.name,
+          message:
+            '重複 → キャラの欠片×' +
+            GACHA.characterDuplicateShards,
+          isNew: false
+        };
+      }
+
+      save.ownedCharacters.push({
+        id: character.id,
+        level: 1,
+        rank: 1,
+        exp: 0
+      });
+
+      return {
+        category: 'キャラクター',
+        name: character.name,
+        message: 'ランク1・レベル1で加入',
+        isNew: true
+      };
+    }
+
+    const spirit = choose(SPIRIT_DEFINITIONS);
+
+    const owned = save.ownedSpirits.find((entry) => {
+      return entry.id === spirit.id;
+    });
+
+    if (owned) {
+      owned.shards = safeAdd(
+        owned.shards,
+        GACHA.spiritDuplicateShards,
+        '精霊の欠片'
+      );
+
+      return {
+        category: '精霊',
+        name: spirit.name,
+        message:
+          '重複 → 精霊の欠片×' +
+          GACHA.spiritDuplicateShards,
+        isNew: false
+      };
+    }
+
+    save.ownedSpirits.push({
+      id: spirit.id,
+      rank: 1,
+      shards: 0
+    });
+
+    return {
+      category: '精霊',
+      name: spirit.name,
+      message: 'ランク1で加入',
+      isNew: true
+    };
+  }
+
+  async function drawGacha(count) {
+    if (
+      busy ||
+      fatal ||
+      isActive() ||
+      ![1, 11].includes(count)
+    ) {
+      return;
+    }
+
+    const cost = count === 1
+      ? GACHA.singleCost
+      : GACHA.elevenCost;
+
+    if (
+      !confirm(
+        number(cost) +
+        'コインで' +
+        count +
+        '回抽選しますか？'
+      )
+    ) {
+      return;
+    }
+
+    let results = [];
+
+    const success = await transact(() => {
+      if (isActive()) {
+        throw new Error('戦闘中はガチャを利用できません。');
+      }
+
+      if (save.coins < cost) {
+        throw new Error('コインが不足しています。');
+      }
+
+      if (characterPool().length === 0) {
+        throw new Error('キャラクターの抽選対象が未登録です。');
+      }
+
+      save.coins -= cost;
+
+      results = Array.from({ length: count }, () => drawOne());
+    });
+
+    if (success) {
+      lastGachaResults = results;
+      renderGachaResults();
+    }
+  }
+
+  function createExtraUI() {
+    const management = $('management');
+
+    const section = node('section', 'management-section');
+    const buttons = node('div', 'button-row');
+
+    const openGacha = node('button', '', '召喚ガチャ');
+    openGacha.id = 'openGacha';
+
+    const openItems = node('button', '', '所持アイテム');
+    openItems.id = 'openItems';
+
+    const boost = node('p', 'muted');
+    boost.id = 'managementBoost';
+
+    buttons.append(openGacha, openItems);
+
+    section.append(
+      node('h3', '', 'ガチャ・アイテム'),
+      buttons,
+      boost,
+      node(
+        'p',
+        'muted',
+        '1回500コイン／11回5,000コイン。' +
+        'ポーションは次の勝利1回に適用します。'
+      )
+    );
+
+    management.append(section);
+
+    const battleBoost = node('div', 'blessing-status');
+    battleBoost.id = 'rewardBoostStatus';
+    $('blessingStatus').after(battleBoost);
+
+    const gachaDialog = document.createElement('dialog');
+    gachaDialog.id = 'gachaDialog';
+
+    const gachaHeader = node('div', 'dialog-header');
+    const closeGacha = node('button', '', '閉じる');
+    closeGacha.id = 'closeGacha';
+
+    gachaHeader.append(
+      node('h2', '', '召喚ガチャ'),
+      closeGacha
+    );
+
+    const coins = node('p', 'coins');
+    coins.id = 'gachaCoins';
+
+    const message = node('p', 'muted');
+    message.id = 'gachaMessage';
+
+    const drawButtons = node('div', 'button-row');
+
+    const single = node('button', 'primary', '1回｜500コイン');
+    single.id = 'gachaSingle';
+
+    const eleven = node('button', 'primary', '11回｜5,000コイン');
+    eleven.id = 'gachaEleven';
+
+    drawButtons.append(single, eleven);
+
+    const rates = node('details', 'management-section');
+    const rateList = node('div', '');
+
+    rateList.append(
+      node('p', 'muted', 'アイテム60％／キャラクター30％／精霊10％')
+    );
+
+    for (const item of ITEM_DEFINITIONS) {
+      rateList.append(
+        node(
+          'p',
+          'muted',
+          item.name +
+          '：全体' +
+          (item.weight * 0.6).toFixed(0) +
+          '％／アイテム枠内' +
+          item.weight +
+          '％'
+        )
+      );
+    }
+
+    rateList.append(
+      node(
+        'p',
+        'muted',
+        'キャラクター枠内・精霊枠内は均等抽選。' +
+        '11回とも独立抽選で、レア保証はありません。'
+      )
+    );
+
+    rates.append(
+      node('summary', '', '排出率を確認'),
+      rateList
+    );
+
+    const results = node('div', 'gacha-results');
+    results.id = 'gachaResults';
+    results.setAttribute('aria-live', 'polite');
+
+    gachaDialog.append(
+      gachaHeader,
+      coins,
+      message,
+      drawButtons,
+      rates,
+      node('h3', '', '抽選結果'),
+      results
+    );
+
+    const itemDialog = document.createElement('dialog');
+    itemDialog.id = 'itemDialog';
+
+    const itemHeader = node('div', 'dialog-header');
+    const closeItems = node('button', '', '閉じる');
+    closeItems.id = 'closeItems';
+
+    itemHeader.append(
+      node('h2', '', '所持アイテム'),
+      closeItems
+    );
+
+    const itemBoost = node('p', 'muted');
+    itemBoost.id = 'itemBoost';
+
+    const itemList = node('div', '');
+    itemList.id = 'itemList';
+
+    itemDialog.append(
+      itemHeader,
+      itemBoost,
+      node(
+        'p',
+        'muted',
+        '同じ種類の効果は上書きします。経験値とコインは併用可能です。' +
+        '使用は戦闘開始前のみ。欠片交換は未実装です。'
+      ),
+      itemList
+    );
+
+    document.body.append(gachaDialog, itemDialog);
+
+    openGacha.onclick = () => {
+      if (busy || fatal || isActive()) {
+        return;
+      }
+
+      lastGachaResults = [];
+      renderExtraUI();
+      gachaDialog.showModal();
+    };
+
+    closeGacha.onclick = () => {
+      if (!busy) {
+        gachaDialog.close();
+      }
+    };
+
+    openItems.onclick = () => {
+      if (busy || fatal) {
+        return;
+      }
+
+      renderItems();
+      itemDialog.showModal();
+    };
+
+    closeItems.onclick = () => {
+      if (!busy) {
+        itemDialog.close();
+      }
+    };
+
+    single.onclick = () => drawGacha(1);
+    eleven.onclick = () => drawGacha(11);
+
+    for (const dialog of [gachaDialog, itemDialog]) {
+      dialog.addEventListener('cancel', (event) => {
+        if (busy) {
+          event.preventDefault();
+        }
+      });
+    }
+  }
+
+  function renderGachaResults() {
+    const root = $('gachaResults');
+    root.replaceChildren();
+
+    if (lastGachaResults.length === 0) {
+      root.append(
+        node('p', 'muted', 'この画面を開いてからの抽選結果を表示します。')
+      );
+
+      return;
+    }
+
+    lastGachaResults.forEach((result, index) => {
+      const card = node(
+        'article',
+        'gacha-result' + (result.isNew ? ' gacha-new' : '')
+      );
+
+      card.append(
+        node('p', 'muted', (index + 1) + '. ' + result.category),
+        node(
+          'strong',
+          '',
+          result.name + (result.isNew ? '｜NEW' : '')
+        ),
+        node('p', 'muted', result.message)
+      );
+
+      root.append(card);
+    });
+  }
+
+  function renderItems() {
+    const root = $('itemList');
+    root.replaceChildren();
+
+    $('itemBoost').textContent =
+      '次の勝利に適用：' + boostText();
+
+    const owned = save.items.filter((entry) => entry.quantity > 0);
+
+    if (owned.length === 0) {
+      root.append(node('p', 'muted', '所持アイテムはありません。'));
+      return;
+    }
+
+    for (const item of owned) {
+      const definition = itemDefinition(item.id);
+      const panel = node('section', 'management-section');
+
+      panel.append(
+        node(
+          'strong',
+          '',
+          itemLabel(item.id) + ' ×' + number(item.quantity)
+        )
+      );
+
+      if (definition) {
+        panel.append(
+          node(
+            'p',
+            'muted',
+            '次の勝利1回の獲得' +
+            (definition.type === 'exp' ? '経験値' : 'コイン') +
+            'を' +
+            definition.multiplier +
+            '倍にします。'
+          )
+        );
+
+        const button = node('button', '', '1個使用');
+        button.disabled = isActive() || busy || fatal;
+        button.onclick = () => usePotion(item.id);
+
+        panel.append(button);
+      } else {
+        panel.append(
+          node('p', 'muted', '交換・使用機能は未実装です。')
+        );
+      }
+
+      root.append(panel);
+    }
+  }
+
+  function renderExtraUI() {
+    $('managementBoost').textContent =
+      '次の勝利に適用：' + boostText();
+
+    $('rewardBoostStatus').textContent =
+      '報酬効果：' + boostText() + '｜次の勝利1回';
+
+    $('gachaCoins').textContent = number(save.coins) + ' COIN';
+
+    const noPool = characterPool().length === 0;
+
+    $('openGacha').disabled = isActive() || busy || fatal;
+    $('openItems').disabled = busy || fatal;
+    $('closeGacha').disabled = busy;
+    $('closeItems').disabled = busy;
+
+    $('gachaSingle').disabled =
+      isActive() ||
+      busy ||
+      fatal ||
+      noPool ||
+      save.coins < GACHA.singleCost;
+
+    $('gachaEleven').disabled =
+      isActive() ||
+      busy ||
+      fatal ||
+      noPool ||
+      save.coins < GACHA.elevenCost;
+
+    $('gachaMessage').textContent = isActive()
+      ? '戦闘中はガチャを利用できません。'
+      : noPool
+        ? 'キャラクターの抽選対象が未登録です。'
+        : 'アイテム60％／キャラクター30％／精霊10％';
+
+    renderGachaResults();
+    renderItems();
   }
 
   function placeholder(element, enemy) {
@@ -1478,17 +2507,20 @@
       '</svg>'
     ].join('');
 
-    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    return 'data:image/svg+xml;charset=utf-8,' +
+      encodeURIComponent(svg);
   }
 
   function image(paths, element, className, alt, enemy) {
     const img = document.createElement('img');
+
     const sources = [
       ...new Set(paths.filter(Boolean)),
       placeholder(element, enemy)
     ];
 
     let index = 0;
+
     img.className = className;
     img.alt = alt;
     img.decoding = 'async';
@@ -1505,6 +2537,7 @@
     };
 
     img.src = sources[0];
+
     return img;
   }
 
@@ -1513,7 +2546,11 @@
     const bar = node('div', 'hp-bar');
     const fill = node('div', 'hp-fill');
 
-    fill.style.width = Math.max(0, Math.min(100, hp / maxHp * 100)) + '%';
+    fill.style.width = Math.max(
+      0,
+      Math.min(100, hp / maxHp * 100)
+    ) + '%';
+
     bar.append(fill);
 
     panel.append(
@@ -1533,12 +2570,14 @@
 
     const promise = new Promise((resolve) => {
       const img = new Image();
+
       img.onload = () => resolve(true);
       img.onerror = () => resolve(false);
       img.src = path;
     });
 
     backgroundCache.set(path, promise);
+
     return promise;
   }
 
@@ -1546,13 +2585,15 @@
     const area = areaFor(index);
     const arena = $('arena');
     const path = area.background || '';
-    const key = path + '|' + (area.backgroundPosition || 'center');
+    const position = area.backgroundPosition || 'center';
+    const key = path + '|' + position;
 
     if (arena.dataset.backgroundKey === key) {
       return;
     }
 
     arena.dataset.backgroundKey = key;
+
     const token = ++backgroundToken;
 
     arena.style.removeProperty('background-image');
@@ -1572,7 +2613,7 @@
         'url("' + path + '")'
       ].join(', ');
 
-      arena.style.backgroundPosition = area.backgroundPosition || 'center';
+      arena.style.backgroundPosition = position;
     });
   }
 
@@ -1582,6 +2623,7 @@
     }
 
     const battle = save.battle;
+
     const index = battle
       ? battle.index
       : Math.min(save.highestCleared + 1, maxStage);
@@ -1590,7 +2632,10 @@
     const area = areaFor(index);
 
     $('coins').textContent = 'COIN ' + number(save.coins);
-    $('stageLabel').textContent = stageName(index) + (info.boss ? ' B' : '');
+
+    $('stageLabel').textContent =
+      stageName(index) + (info.boss ? ' B' : '');
+
     $('areaLabel').textContent = area.name;
     $('areaLabel').title = area.name;
 
@@ -1601,6 +2646,15 @@
         : 'R —';
 
     $('openManagement').disabled = false;
+    $('closeManagement').disabled = false;
+    $('exportSave').disabled = false;
+    $('importSave').disabled = false;
+    $('cancelHeal').disabled = false;
+
+    $('openCollection').disabled = false;
+    $('openFormation').disabled = false;
+    $('closeCollection').disabled = false;
+    $('closeFormation').disabled = false;
 
     renderBackground(index);
     renderEnemies();
@@ -1608,6 +2662,7 @@
     renderCommands();
     renderResult();
     renderManagement();
+
     C.render();
 
     if (battle) {
@@ -1615,6 +2670,19 @@
         ? battle.blessing.name + '｜' + battle.blessing.text
         : 'この戦闘の精霊加護：なし';
     }
+
+    renderExtraUI();
+
+    // collection.jsの編成保存ボタンも、全体ロック解除後に復元する。
+    const formationSelects =
+      $('formationCharacters').querySelectorAll('select');
+
+    const ids = Array.from(formationSelects, (select) => select.value);
+
+    $('saveFormation').disabled =
+      isActive() ||
+      ids.length !== 4 ||
+      new Set(ids).size !== 4;
 
     $('log').replaceChildren();
 
@@ -1631,6 +2699,7 @@
 
   function renderEnemies() {
     const battle = save.battle;
+
     $('enemies').replaceChildren();
     $('emptyArena').hidden = !!battle;
     $('warning').textContent = '';
@@ -1649,9 +2718,11 @@
         warnings.push('強打の予兆！ 防御・かばうが有効');
       }
 
-      if (battle.enemies.some((enemy) => {
-        return enemy.hp > 0 && enemy.hp <= enemy.maxHp / 2;
-      })) {
+      if (
+        battle.enemies.some((enemy) => {
+          return enemy.hp > 0 && enemy.hp <= enemy.maxHp / 2;
+        })
+      ) {
         warnings.push('ボス激昂');
       }
     }
@@ -1679,14 +2750,25 @@
 
       button.disabled = !isActive() || enemy.hp <= 0;
       button.title = enemy.name;
-      button.setAttribute('aria-pressed', String(selectedEnemy === index));
+
+      button.setAttribute(
+        'aria-pressed',
+        String(selectedEnemy === index)
+      );
+
       button.setAttribute(
         'aria-label',
         enemy.name + ' HP ' + enemy.hp + '/' + enemy.maxHp
       );
 
       frame.append(
-        image([definition.image], enemy.element, 'enemy-image', enemy.name, true),
+        image(
+          [definition.image],
+          enemy.element,
+          'enemy-image',
+          enemy.name,
+          true
+        ),
         overlay(
           enemy.name,
           D.elements[enemy.element].name + (boss ? ' / BOSS' : ''),
@@ -1715,6 +2797,7 @@
       const definition = characters.get(member.id);
       const value = stats(member);
       const ally = save.battle?.allies[index];
+
       const hp = ally ? ally.hp : value.hp;
       const maxHp = ally ? ally.maxHp : value.hp;
 
@@ -1730,8 +2813,15 @@
 
       button.setAttribute(
         'aria-label',
-        definition.name + ' R' + member.rank +
-        ' Lv.' + member.level + ' HP ' + hp + '/' + maxHp
+        definition.name +
+        ' R' +
+        member.rank +
+        ' Lv.' +
+        member.level +
+        ' HP ' +
+        hp +
+        '/' +
+        maxHp
       );
 
       frame.append(
@@ -1745,7 +2835,10 @@
         overlay(
           definition.name,
           D.elements[definition.element].name +
-          ' / R' + member.rank + ' Lv.' + member.level,
+          ' / R' +
+          member.rank +
+          ' Lv.' +
+          member.level,
           hp,
           maxHp
         )
@@ -1762,7 +2855,10 @@
           !busy
         ) {
           const slot = pendingHeal;
-          transact(() => performAction('skill', slot, index));
+
+          transact(() => {
+            performAction('skill', slot, index);
+          });
         }
       };
 
@@ -1793,9 +2889,13 @@
       const skill = skillFor(id, actor.rank);
       const used = actor.usedSkills[slot];
       const cooldown = actor.cooldowns[slot];
+
       const button = node('button', 'skill');
 
-      button.disabled = used || cooldown > 0 || pendingHeal !== null;
+      button.disabled =
+        used ||
+        cooldown > 0 ||
+        pendingHeal !== null;
 
       button.append(
         node('span', 'skill-name', (slot + 1) + '. ' + skill.name),
@@ -1815,7 +2915,7 @@
           return;
         }
 
-        if (skill.target === 'ally') {
+        if (skill.type === 'heal') {
           pendingHeal = slot;
           renderParty();
           renderCommands();
@@ -1830,6 +2930,7 @@
 
   function renderResult() {
     const root = $('result');
+
     root.replaceChildren();
     root.hidden = isActive();
 
@@ -1852,33 +2953,64 @@
     root.append(node('div', 'result-title', title));
 
     if (battle?.rewards) {
+      const reward = battle.rewards;
+
       root.append(
         node(
           'p',
           '',
-          'EXP +' + number(battle.rewards.exp) +
-          ' / COIN +' + number(battle.rewards.coins)
+          'EXP +' +
+          number(reward.exp) +
+          ' / COIN +' +
+          number(reward.coins)
         )
       );
 
-      for (const text of battle.rewards.levelUps) {
+      if (
+        reward.expMultiplier > 1 ||
+        reward.coinMultiplier > 1
+      ) {
+        root.append(
+          node(
+            'p',
+            'muted',
+            '適用倍率：経験値×' +
+            reward.expMultiplier +
+            '／コイン×' +
+            reward.coinMultiplier
+          )
+        );
+      }
+
+      for (const text of reward.levelUps) {
         root.append(node('div', 'muted', text));
       }
     }
 
-    if (save.party.some((member) => {
-      return member.level === D.rules.maxLevel &&
-        member.rank < D.rules.maxRank;
-    })) {
+    if (
+      save.party.some((member) => {
+        return member.level === D.rules.maxLevel &&
+          member.rank < D.rules.maxRank;
+      })
+    ) {
       root.append(
-        node('p', 'muted', '転生可能な仲間がいます。管理で確認できます。')
+        node(
+          'p',
+          'muted',
+          '転生可能な仲間がいます。管理で確認できます。'
+        )
       );
     }
 
     const buttons = node('div', 'result-buttons');
 
     function addButton(label, index, primary) {
-      const button = node('button', primary ? 'primary' : '', label);
+      const button = node(
+        'button',
+        primary ? 'primary' : '',
+        label
+      );
+
       button.onclick = () => transact(() => startBattle(index));
       buttons.append(button);
     }
@@ -1904,14 +3036,27 @@
 
   function renderManagement() {
     $('progressText').textContent =
-      '突破 ' + save.highestCleared + '/' + maxStage + 'ステージ・' +
-      Math.floor(save.highestCleared / D.rules.stagesPerFloor) +
-      '/' + D.rules.floors + '階';
+      '突破 ' +
+      save.highestCleared +
+      '/' +
+      maxStage +
+      'ステージ・' +
+      Math.floor(
+        save.highestCleared / D.rules.stagesPerFloor
+      ) +
+      '/' +
+      D.rules.floors +
+      '階';
 
     $('coinText').textContent = number(save.coins) + ' COIN';
 
-    const available = Math.min(save.highestCleared + 1, maxStage);
+    const available = Math.min(
+      save.highestCleared + 1,
+      maxStage
+    );
+
     const maxFloor = stageInfo(available).floor;
+
     const previous = Number($('floorSelect').value) ||
       stageInfo(save.selectedStage).floor;
 
@@ -1919,75 +3064,113 @@
 
     for (let floor = 1; floor <= maxFloor; floor += 1) {
       const first = (floor - 1) * D.rules.stagesPerFloor + 1;
-      const option = node('option', '', floor + '階／' + areaFor(first).name);
+
+      const option = node(
+        'option',
+        '',
+        floor + '階／' + areaFor(first).name
+      );
+
       option.value = floor;
       $('floorSelect').append(option);
     }
 
     $('floorSelect').value = Math.min(previous, maxFloor);
+
     populateStages();
 
     $('startSelected').disabled = isActive();
     $('retreat').disabled = !isActive();
+
     $('members').replaceChildren();
 
     for (const member of save.party) {
       const definition = characters.get(member.id);
       const value = stats(member);
-      const blessedAtk = C.attackWithBlessing(save, member.id, value.atk);
+
+      const blessedAtk = C.attackWithBlessing(
+        save,
+        member.id,
+        value.atk
+      );
+
       const panel = node('div', 'member-panel');
 
       panel.append(
         node(
           'strong',
           '',
-          definition.name + '／' + definition.jobs[member.rank - 1]
+          definition.name +
+          '／' +
+          definition.jobs[member.rank - 1]
         ),
         node(
           'p',
           'muted',
-          'R' + member.rank + ' Lv.' + member.level +
-          '／HP ' + number(value.hp) +
-          ' ATK ' + number(value.atk) +
-          ' DEF ' + number(value.def)
+          'R' +
+          member.rank +
+          ' Lv.' +
+          member.level +
+          '／HP ' +
+          number(value.hp) +
+          ' ATK ' +
+          number(value.atk) +
+          ' DEF ' +
+          number(value.def)
         ),
         node(
           'p',
           'muted',
-          '装備中の精霊による戦闘開始時ATK：' + number(blessedAtk)
+          '精霊加護適用後ATK：' + number(blessedAtk)
         ),
         node(
           'p',
           'muted',
           member.level === D.rules.maxLevel
             ? '最大レベル'
-            : 'EXP ' + number(member.exp) + '/' + number(neededExp(member.level))
+            : 'EXP ' +
+              number(member.exp) +
+              '/' +
+              number(neededExp(member.level))
         )
       );
 
       for (const id of definition.skills) {
         const skill = skillFor(id, member.rank);
+
         panel.append(
-          node('p', 'muted', skill.name + '：' + skillDescription(skill))
+          node(
+            'p',
+            'muted',
+            skill.name + '：' + skillDescription(skill)
+          )
         );
       }
 
       const button = node(
         'button',
         '',
-        member.rank >= D.rules.maxRank ? '最大ランク' : '転生する'
+        member.rank >= D.rules.maxRank
+          ? '最大ランク'
+          : '転生する'
       );
 
-      button.disabled = isActive() ||
+      button.disabled =
+        isActive() ||
         member.level !== D.rules.maxLevel ||
         member.rank >= D.rules.maxRank;
 
       button.onclick = () => {
-        if (fatal || busy) {
+        if (
+          fatal ||
+          busy ||
+          member.rank >= D.rules.maxRank
+        ) {
           return;
         }
 
         const nextRank = member.rank + 1;
+
         const after = stats({
           id: member.id,
           rank: nextRank,
@@ -2005,8 +3188,7 @@
           'DEF ' + value.def + ' → ' + after.def,
           '',
           '上記は精霊加護を含まない数値です。',
-          'スキルも上位版になります。',
-          'コインと突破状況は維持します。'
+          'コイン・突破状況・ポーション効果は維持します。'
         ].join('\n');
 
         if (confirm(message)) {
@@ -2022,8 +3204,17 @@
   function populateStages() {
     const floor = Number($('floorSelect').value);
     const count = D.rules.stagesPerFloor;
-    const available = Math.min(save.highestCleared + 1, maxStage);
-    const max = Math.min(count, available - (floor - 1) * count);
+
+    const available = Math.min(
+      save.highestCleared + 1,
+      maxStage
+    );
+
+    const max = Math.min(
+      count,
+      available - (floor - 1) * count
+    );
+
     const selected = stageInfo(save.selectedStage);
 
     const previous = Number($('stageSelect').value) ||
@@ -2043,12 +3234,14 @@
     }
 
     $('stageSelect').value = Math.min(previous, max);
+
     renderPreview();
   }
 
   function selectedIndex() {
-    return (Number($('floorSelect').value) - 1) *
-      D.rules.stagesPerFloor +
+    return (
+      Number($('floorSelect').value) - 1
+    ) * D.rules.stagesPerFloor +
       Number($('stageSelect').value);
   }
 
@@ -2059,17 +3252,24 @@
       return;
     }
 
-    const names = encounterIds(index).map((id) => enemies.get(id).name);
+    const names = encounterIds(index).map((id) => {
+      return enemies.get(id).name;
+    });
+
     const reward = rewardFor(index);
 
     $('encounterPreview').textContent =
-      areaFor(index).name + '／' + names.join('・') +
-      '／EXP ' + number(reward.exp) +
-      '／COIN ' + number(reward.coins);
+      areaFor(index).name +
+      '／' +
+      names.join('・') +
+      '／EXP ' +
+      number(reward.exp * save.rewardBoosts.exp) +
+      '／COIN ' +
+      number(reward.coins * save.rewardBoosts.coins);
   }
 
   function exportSave() {
-    if (!save) {
+    if (!save || busy) {
       return;
     }
 
@@ -2082,8 +3282,10 @@
     const link = document.createElement('a');
 
     link.href = url;
-    link.download = 'towerquest-collection-' +
-      new Date().toISOString().slice(0, 10) + '.json';
+
+    link.download = 'towerquest-items-' +
+      new Date().toISOString().slice(0, 10) +
+      '.json';
 
     document.body.append(link);
     link.click();
@@ -2102,7 +3304,9 @@
         throw new Error('ファイルが大きすぎます。');
       }
 
-      const result = normalizeSave(JSON.parse(await file.text()));
+      const result = normalizeSave(
+        JSON.parse(await file.text())
+      );
 
       const message = [
         '現在の進行を置き換えます。',
@@ -2112,8 +3316,10 @@
         '突破済み：' + result.value.highestCleared + '/' + maxStage,
         '所持キャラ：' + result.value.ownedCharacters.length + '人',
         '所持精霊：' + result.value.ownedSpirits.length + '体',
+        '報酬効果：経験値×' + result.value.rewardBoosts.exp +
+          '／コイン×' + result.value.rewardBoosts.coins,
         result.migrated ? '旧セーブを新仕様へ移行します。' : '',
-        result.capped ? '旧突破数を100へ補正します。' : '',
+        result.itemsMigrated ? 'アイテム仕様を更新します。' : '',
         result.battleReset ? '旧戦闘途中データは解除します。' : '',
         '',
         '読み込みますか？'
@@ -2126,8 +3332,18 @@
         });
 
         if (success) {
-          $('formationDialog').close();
-          $('collectionDialog').close();
+          lastGachaResults = [];
+
+          for (const id of [
+            'formationDialog',
+            'collectionDialog',
+            'gachaDialog',
+            'itemDialog'
+          ]) {
+            $(id).close();
+          }
+
+          renderExtraUI();
         }
       }
     } catch (error) {
@@ -2143,7 +3359,9 @@
   }
 
   function reducedMotion() {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return window.matchMedia(
+      '(prefers-reduced-motion: reduce)'
+    ).matches;
   }
 
   async function animate(element, frames, duration) {
@@ -2152,7 +3370,9 @@
     }
 
     const animation = element.animate(frames, {
-      duration: reducedMotion() ? Math.min(duration, 100) : duration,
+      duration: reducedMotion()
+        ? Math.min(duration, 100)
+        : duration,
       easing: 'ease-out',
       fill: 'none'
     });
@@ -2160,13 +3380,13 @@
     try {
       await animation.finished;
     } catch (error) {
-      // 演出中断時も、確定済みの進行は維持する。
+      // 演出が中断されても、確定済みの進行は維持する。
     } finally {
       animation.cancel();
     }
   }
 
-  async function attackMove(element) {
+  async function attackMove(element, side) {
     if (!element) {
       return;
     }
@@ -2174,17 +3394,25 @@
     element.classList.add('is-performing');
 
     try {
-      const distance = reducedMotion() ? 0 : 36;
+      const distance = reducedMotion()
+        ? 0
+        : side === 'enemy'
+          ? 28
+          : -36;
 
       await animate(
         element,
         [
-          { transform: 'translateY(0)' },
           {
-            transform: 'translateY(-' + distance + 'px)',
+            transform: 'translateY(0)'
+          },
+          {
+            transform: 'translateY(' + distance + 'px)',
             offset: 0.45
           },
-          { transform: 'translateY(0)' }
+          {
+            transform: 'translateY(0)'
+          }
         ],
         300
       );
@@ -2199,12 +3427,24 @@
     await animate(
       element,
       [
-        { transform: 'translateX(0)' },
-        { transform: 'translateX(-' + distance + 'px)' },
-        { transform: 'translateX(' + distance + 'px)' },
-        { transform: 'translateX(-' + distance + 'px)' },
-        { transform: 'translateX(' + distance + 'px)' },
-        { transform: 'translateX(0)' }
+        {
+          transform: 'translateX(0)'
+        },
+        {
+          transform: 'translateX(-' + distance + 'px)'
+        },
+        {
+          transform: 'translateX(' + distance + 'px)'
+        },
+        {
+          transform: 'translateX(-' + distance + 'px)'
+        },
+        {
+          transform: 'translateX(' + distance + 'px)'
+        },
+        {
+          transform: 'translateX(0)'
+        }
       ],
       240
     );
@@ -2266,6 +3506,7 @@
 
     const ring = node('div', 'effect-ring');
     const core = node('div', 'effect-core');
+
     effect.append(ring, core);
     element.append(effect);
 
@@ -2325,6 +3566,7 @@
 
       const angle = Math.PI * 2 * i / count;
       const distance = mode === 'heal' ? 28 : 38;
+
       const x = Math.cos(angle) * distance;
       const y = mode === 'heal'
         ? -20 - Math.abs(Math.sin(angle) * distance)
@@ -2345,8 +3587,11 @@
             {
               opacity: 0,
               transform:
-                'translate(calc(-50% + ' + x + 'px), ' +
-                'calc(-50% + ' + y + 'px)) scale(0.8)'
+                'translate(calc(-50% + ' +
+                x +
+                'px), calc(-50% + ' +
+                y +
+                'px)) scale(0.8)'
             }
           ],
           420
@@ -2370,7 +3615,7 @@
       const target = fxTarget(event.side, event.index);
 
       if (event.kind === 'move') {
-        await attackMove(target);
+        await attackMove(target, event.side);
       } else if (event.kind === 'damage') {
         await Promise.all([
           shake(target),
@@ -2386,7 +3631,10 @@
           showNumber(target, event.amount, true),
           attributeEffect(target, event.element, 'heal')
         ]);
-      } else if (event.kind === 'cast' || event.kind === 'enhance') {
+      } else if (
+        event.kind === 'cast' ||
+        event.kind === 'enhance'
+      ) {
         await attributeEffect(target, event.element, 'enhance');
       } else if (event.kind === 'debuff') {
         await attributeEffect(target, event.element, 'attack');
@@ -2399,6 +3647,7 @@
       if (!fatal && !busy && save) {
         renderManagement();
         C.render();
+        renderExtraUI();
         $('management').showModal();
       }
     };
@@ -2432,8 +3681,12 @@
     $('retreat').onclick = () => {
       if (
         !busy &&
+        !fatal &&
         isActive() &&
-        confirm('撤退しますか？ この戦闘の報酬は獲得できません。')
+        confirm(
+          '撤退しますか？ 報酬は獲得できません。' +
+          'ポーション効果は維持されます。'
+        )
       ) {
         transact(() => {
           save.battle = null;
@@ -2469,7 +3722,6 @@
       importSave(event.target.files[0]);
     };
 
-    // Escapeキーで演出中の管理画面などを閉じない。
     document.querySelectorAll('dialog').forEach((dialog) => {
       dialog.addEventListener('cancel', (event) => {
         if (busy) {
@@ -2485,7 +3737,10 @@
 
       fatal = true;
       lockInput(true);
-      status('別タブで保存データが変わりました。再読み込みしてください。');
+
+      status(
+        '別タブで保存データが変わりました。再読み込みしてください。'
+      );
     });
   }
 
