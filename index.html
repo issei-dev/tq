@@ -7,17 +7,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0c1019">
   <meta name="color-scheme" content="dark">
+
   <title>タワークエスト</title>
 
   <link rel="stylesheet" href="./style.css">
+
   <script src="./data.js" defer></script>
+  <script src="./collection.js" defer></script>
   <script src="./game.js" defer></script>
 </head>
 <body>
   <main class="app">
     <header class="topbar">
       <h1>タワークエスト</h1>
-      <button id="openManagement" type="button" disabled>管理</button>
+      <button id="openManagement" type="button" disabled>
+        管理
+      </button>
     </header>
 
     <section class="info-row" aria-label="進行情報">
@@ -27,25 +32,28 @@
       <span id="roundLabel">R —</span>
     </section>
 
-    <!-- Output: html -->
-<!-- File: index.html -->
-<section
-  id="arena"
-  class="arena shared-battle-area"
-  aria-label="戦闘エリア"
->
-  <section class="enemy-area" aria-label="敵">
-    <div id="warning" role="status"></div>
-    <div id="enemies"></div>
-    <div id="emptyArena">塔に挑戦しよう</div>
-  </section>
+    <section
+      id="arena"
+      class="arena shared-battle-area"
+      aria-label="戦闘エリア"
+    >
+      <section class="enemy-area" aria-label="敵">
+        <div id="warning" role="status"></div>
+        <div id="enemies"></div>
+        <div id="emptyArena">塔に挑戦しよう</div>
+      </section>
 
-  <section id="party" aria-label="パーティ"></section>
-</section>
+      <section id="party" aria-label="パーティ"></section>
+
+      <div id="blessingStatus" class="blessing-status">
+        精霊未装備
+      </div>
+    </section>
 
     <section id="commands" hidden>
       <div class="turn-row">
         <strong id="turnLabel"></strong>
+
         <button id="cancelHeal" type="button" hidden>
           対象選択を取消
         </button>
@@ -55,7 +63,10 @@
         <button id="attack" class="primary" type="button">
           こうげき
         </button>
-        <button id="defend" type="button">ぼうぎょ</button>
+
+        <button id="defend" type="button">
+          ぼうぎょ
+        </button>
       </div>
 
       <div id="skills"></div>
@@ -74,17 +85,44 @@
   <dialog id="management">
     <div class="dialog-header">
       <h2>管理</h2>
-      <button id="closeManagement" type="button">閉じる</button>
+      <button id="closeManagement" type="button">
+        閉じる
+      </button>
     </div>
 
     <section class="management-section">
       <h3>進行・コイン</h3>
+
       <p id="progressText"></p>
       <p id="coinText" class="coins"></p>
+
       <p class="muted">
         全10階・各階10ステージ、合計100ステージです。
         各階のステージ10がボス戦です。
         コイン交換は未実装です。
+      </p>
+    </section>
+
+    <section class="management-section">
+      <h3>仲間・精霊</h3>
+
+      <div class="button-row">
+        <button id="openCollection" type="button">
+          所持一覧
+        </button>
+
+        <button id="openFormation" type="button">
+          編成
+        </button>
+
+        <button id="grantTestSpirit" type="button">
+          テスト精霊を受け取る
+        </button>
+      </div>
+
+      <p class="muted">
+        出撃キャラ4人と精霊1体を編成できます。
+        戦闘中は編成を変更できません。
       </p>
     </section>
 
@@ -96,6 +134,7 @@
           階層
           <select id="floorSelect"></select>
         </label>
+
         <label for="stageSelect">
           ステージ
           <select id="stageSelect"></select>
@@ -108,6 +147,7 @@
         <button id="startSelected" class="primary" type="button">
           挑戦する
         </button>
+
         <button id="retreat" class="danger" type="button">
           撤退
         </button>
@@ -121,25 +161,29 @@
 
     <section class="management-section">
       <h3>育成・転生</h3>
+
       <p class="muted">
         最大レベル99、最大ランク3。
         転生後はレベル1に戻り、基礎値と成長量が4倍になります。
+        ここには出撃中の4人を表示します。
       </p>
+
       <div id="members"></div>
     </section>
 
     <section class="management-section">
       <h3>セーブ・バックアップ</h3>
+
       <p class="muted">
         操作ごとに、このブラウザへ保存します。
-        別端末への移行や、ブラウザデータの削除に備えて
-        バックアップしてください。
+        所持キャラ・精霊・編成もバックアップに含まれます。
       </p>
 
       <div class="button-row">
         <button id="exportSave" type="button">
           バックアップ保存
         </button>
+
         <button id="importSave" type="button">
           バックアップ読込
         </button>
@@ -157,6 +201,70 @@
         master.jsonは読み込めません。
       </p>
     </section>
+  </dialog>
+
+  <dialog id="collectionDialog">
+    <div class="dialog-header">
+      <h2 id="collectionTitle">所持一覧</h2>
+
+      <button id="closeCollection" type="button">
+        閉じる
+      </button>
+    </div>
+
+    <div class="button-row collection-tabs">
+      <button
+        id="showCharacters"
+        type="button"
+        aria-pressed="true"
+      >
+        キャラクター
+      </button>
+
+      <button
+        id="showSpirits"
+        type="button"
+        aria-pressed="false"
+      >
+        精霊
+      </button>
+    </div>
+
+    <div id="collectionList" class="collection-grid"></div>
+  </dialog>
+
+  <dialog id="formationDialog">
+    <div class="dialog-header">
+      <h2>編成</h2>
+
+      <button id="closeFormation" type="button">
+        閉じる
+      </button>
+    </div>
+
+    <p class="muted">
+      上から順にキャラ1・2・3・4の行動順になります。
+      同じキャラを複数枠には配置できません。
+    </p>
+
+    <div id="formationCharacters" class="formation-grid"></div>
+
+    <section class="management-section">
+      <h3>装備する精霊</h3>
+
+      <select
+        id="formationSpirit"
+        aria-label="装備する精霊"
+      ></select>
+
+      <div id="formationPreview" class="formation-preview"></div>
+    </section>
+
+    <div class="button-row">
+      <button id="saveFormation" class="primary" type="button">
+        編成を保存
+      </button>
+    </div>
   </dialog>
 
   <noscript>
