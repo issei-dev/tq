@@ -928,3 +928,54 @@ select {
     padding: 7px;
   }
 }
+/* File: style.css */
+
+.gacha-results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0 20px;
+}
+
+.gacha-result {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line, #334155);
+  border-radius: 12px;
+  background: #101725;
+  overflow-wrap: anywhere;
+}
+
+.gacha-result strong {
+  display: block;
+  font-size: 13px;
+}
+
+.gacha-result p {
+  margin: 6px 0;
+}
+
+.gacha-result.gacha-new {
+  border-color: var(--gold, #e8c76a);
+  background: linear-gradient(
+    145deg,
+    rgba(232, 199, 106, 0.12),
+    #101725
+  );
+}
+
+#gachaDialog h3 {
+  margin-top: 20px;
+}
+
+#gachaInventory {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: #101725;
+}
+
+@media (max-width: 360px) {
+  .gacha-results {
+    grid-template-columns: 1fr;
+  }
+}
