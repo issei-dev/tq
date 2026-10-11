@@ -257,8 +257,8 @@
         ],
         portraits: [
           './assets/characters/leon_r1.png',
-          './assets/characters/leon_r3.png',
-          './assets/characters/leon_r5.png'
+          './assets/characters/leon_r1.png',
+          './assets/characters/leon_r1.png'
         ],
         skills: [
           'flame_edge',
@@ -279,8 +279,8 @@
         ],
         portraits: [
           './assets/characters/serena_r1.png',
-          './assets/characters/serena_r3.png',
-          './assets/characters/serena_r5.png'
+          './assets/characters/serena_r1.png',
+          './assets/characters/serena_r1.png'
         ],
         skills: [
           'aqua_lance',
@@ -301,8 +301,8 @@
         ],
         portraits: [
           './assets/characters/rizel_r1.png',
-          './assets/characters/rizel_r3.png',
-          './assets/characters/rizel_r5.png'
+          './assets/characters/rizel_r1.png',
+          './assets/characters/rizel_r1.png'
         ],
         skills: [
           'bolt_rush',
@@ -323,8 +323,8 @@
         ],
         portraits: [
           './assets/characters/lumina_r1.png',
-          './assets/characters/lumina_r3.png',
-          './assets/characters/lumina_r5.png'
+          './assets/characters/lumina_r1.png',
+          './assets/characters/lumina_r1.png'
         ],
         skills: [
           'ray_shot',
