@@ -1,0 +1,144 @@
+<!-- Output: html -->
+<!-- File: index.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c1019">
+  <meta name="color-scheme" content="dark">
+  <title>タワークエスト</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./data.js" defer></script>
+  <script src="./game.js" defer></script>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <h1>タワークエスト</h1>
+        <div id="coins" class="coins">COIN 0</div>
+      </div>
+      <button id="openManagement">管理</button>
+    </header>
+
+    <section class="progress-panel">
+      <strong id="stageLabel">読み込み中</strong>
+      <span id="roundLabel"></span>
+    </section>
+
+    <section class="arena" aria-label="敵">
+      <div id="warning" role="status"></div>
+      <div id="enemies"></div>
+      <div id="emptyArena">塔に挑戦しよう</div>
+    </section>
+
+    <section id="party" aria-label="パーティ"></section>
+
+    <section id="commands" hidden>
+      <div class="turn-row">
+        <strong id="turnLabel"></strong>
+        <button id="cancelHeal" hidden>対象選択を取消</button>
+      </div>
+
+      <div class="main-commands">
+        <button id="attack" class="primary">こうげき</button>
+        <button id="defend">ぼうぎょ</button>
+      </div>
+
+      <div id="skills"></div>
+    </section>
+
+    <section id="result" class="panel"></section>
+
+    <details class="battle-log">
+      <summary>戦闘ログ</summary>
+      <div id="log" aria-live="polite"></div>
+    </details>
+
+    <div id="status" role="status"></div>
+  </main>
+
+  <dialog id="management">
+    <div class="dialog-header">
+      <h2>管理</h2>
+      <button id="closeManagement">閉じる</button>
+    </div>
+
+    <section class="management-section">
+      <h3>進行・コイン</h3>
+      <p id="progressText"></p>
+      <p id="coinText" class="coins"></p>
+      <p class="muted">
+        初期版は最大ランク3です。
+        コイン交換は未実装です。
+      </p>
+    </section>
+
+    <section class="management-section">
+      <h3>ステージ選択</h3>
+
+      <div class="select-row">
+        <label>
+          階層
+          <select id="floorSelect"></select>
+        </label>
+        <label>
+          ステージ
+          <select id="stageSelect"></select>
+        </label>
+      </div>
+
+      <div id="encounterPreview" class="muted"></div>
+
+      <div class="button-row">
+        <button id="startSelected" class="primary">挑戦する</button>
+        <button id="retreat" class="danger">撤退</button>
+      </div>
+
+      <p class="muted">
+        戦闘中のステージ変更・転生には撤退が必要です。
+        敗北・撤退では報酬を獲得できません。
+      </p>
+    </section>
+
+    <section class="management-section">
+      <h3>育成・転生</h3>
+      <p class="muted">
+        レベル99で転生可能。
+        転生後はレベル1に戻り、基礎値と成長量が4倍になります。
+      </p>
+      <div id="members"></div>
+    </section>
+
+    <section class="management-section">
+      <h3>セーブ・バックアップ</h3>
+      <p class="muted">
+        操作ごとに、このブラウザへ保存します。
+        ブラウザのデータ削除に備えてバックアップしてください。
+      </p>
+
+      <div class="button-row">
+        <button id="exportSave">バックアップ保存</button>
+        <button id="importSave">バックアップ読込</button>
+      </div>
+
+      <input
+        id="saveFile"
+        type="file"
+        accept=".json,application/json"
+        hidden
+      >
+
+      <p class="muted">
+        旧GitHub Pages版とGAS版のプレイヤーJSONを読み込めます。
+        master.jsonは読み込めません。
+      </p>
+    </section>
+  </dialog>
+
+  <noscript>
+    このゲームを遊ぶにはJavaScriptを有効にしてください。
+  </noscript>
+</body>
+</html>
