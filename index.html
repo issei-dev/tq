@@ -8,23 +8,27 @@
   <meta name="theme-color" content="#0c1019">
   <meta name="color-scheme" content="dark">
   <title>タワークエスト</title>
+
   <link rel="stylesheet" href="./style.css">
+
   <script src="./data.js" defer></script>
   <script src="./game.js" defer></script>
 </head>
 <body>
   <main class="app">
     <header class="topbar">
-      <div>
-        <h1>タワークエスト</h1>
-        <div id="coins" class="coins">COIN 0</div>
-      </div>
-      <button id="openManagement">管理</button>
+      <h1>タワークエスト</h1>
+      <button id="openManagement" type="button">管理</button>
     </header>
 
-    <section class="progress-panel">
-      <strong id="stageLabel">読み込み中</strong>
-      <span id="roundLabel"></span>
+    <section
+      class="progress-panel compact-info"
+      aria-label="進行情報"
+    >
+      <span id="coins" class="coins">COIN 0</span>
+      <strong id="stageLabel">1-1</strong>
+      <span id="areaLabel">練習場</span>
+      <span id="roundLabel">R —</span>
     </section>
 
     <section class="arena" aria-label="敵">
@@ -38,12 +42,28 @@
     <section id="commands" hidden>
       <div class="turn-row">
         <strong id="turnLabel"></strong>
-        <button id="cancelHeal" hidden>対象選択を取消</button>
+
+        <button
+          id="cancelHeal"
+          type="button"
+          hidden
+        >
+          対象選択を取消
+        </button>
       </div>
 
       <div class="main-commands">
-        <button id="attack" class="primary">こうげき</button>
-        <button id="defend">ぼうぎょ</button>
+        <button
+          id="attack"
+          class="primary"
+          type="button"
+        >
+          こうげき
+        </button>
+
+        <button id="defend" type="button">
+          ぼうぎょ
+        </button>
       </div>
 
       <div id="skills"></div>
@@ -62,13 +82,15 @@
   <dialog id="management">
     <div class="dialog-header">
       <h2>管理</h2>
-      <button id="closeManagement">閉じる</button>
+      <button id="closeManagement" type="button">閉じる</button>
     </div>
 
     <section class="management-section">
       <h3>進行・コイン</h3>
+
       <p id="progressText"></p>
       <p id="coinText" class="coins"></p>
+
       <p class="muted">
         初期版は最大ランク3です。
         コイン交換は未実装です。
@@ -79,11 +101,12 @@
       <h3>ステージ選択</h3>
 
       <div class="select-row">
-        <label>
+        <label for="floorSelect">
           階層
           <select id="floorSelect"></select>
         </label>
-        <label>
+
+        <label for="stageSelect">
           ステージ
           <select id="stageSelect"></select>
         </label>
@@ -92,8 +115,21 @@
       <div id="encounterPreview" class="muted"></div>
 
       <div class="button-row">
-        <button id="startSelected" class="primary">挑戦する</button>
-        <button id="retreat" class="danger">撤退</button>
+        <button
+          id="startSelected"
+          class="primary"
+          type="button"
+        >
+          挑戦する
+        </button>
+
+        <button
+          id="retreat"
+          class="danger"
+          type="button"
+        >
+          撤退
+        </button>
       </div>
 
       <p class="muted">
@@ -104,23 +140,32 @@
 
     <section class="management-section">
       <h3>育成・転生</h3>
+
       <p class="muted">
         レベル99で転生可能。
-        転生後はレベル1に戻り、基礎値と成長量が4倍になります。
+        転生後はレベル1に戻り、
+        基礎値と成長量が4倍になります。
       </p>
+
       <div id="members"></div>
     </section>
 
     <section class="management-section">
       <h3>セーブ・バックアップ</h3>
+
       <p class="muted">
         操作ごとに、このブラウザへ保存します。
         ブラウザのデータ削除に備えてバックアップしてください。
       </p>
 
       <div class="button-row">
-        <button id="exportSave">バックアップ保存</button>
-        <button id="importSave">バックアップ読込</button>
+        <button id="exportSave" type="button">
+          バックアップ保存
+        </button>
+
+        <button id="importSave" type="button">
+          バックアップ読込
+        </button>
       </div>
 
       <input
