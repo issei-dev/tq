@@ -78,7 +78,7 @@ window.TQ_DATA = {
         'フェニックスロード'
       ],
       portraits: [
-        './assets/characters/leon_r1.PNG',
+        './assets/characters/leon_r1.jpg',
         './assets/characters/leon_r3.PNG',
         './assets/characters/leon_r5.PNG'
       ],
@@ -101,7 +101,7 @@ window.TQ_DATA = {
         'オーシャンエンプレス'
       ],
       portraits: [
-        './assets/characters/serena_r1.PNG',
+        './assets/characters/serena_r1.jpg',
         './assets/characters/serena_r3.PNG',
         './assets/characters/serena_r5.PNG'
       ],
@@ -124,7 +124,7 @@ window.TQ_DATA = {
         'ライトニングヴァルキリー'
       ],
       portraits: [
-        './assets/characters/rizel_r1.PNG',
+        './assets/characters/rizel_r1.jpg',
         './assets/characters/rizel_r3.PNG',
         './assets/characters/rizel_r5.PNG'
       ],
@@ -147,7 +147,7 @@ window.TQ_DATA = {
         'アストラルセラフ'
       ],
       portraits: [
-        './assets/characters/lumina_r1.PNG',
+        './assets/characters/lumina_r1.jpg',
         './assets/characters/lumina_r3.PNG',
         './assets/characters/lumina_r5.PNG'
       ],
