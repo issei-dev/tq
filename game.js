@@ -841,7 +841,43 @@
       } else {
         save = freshSave();
         persist();
-      }
+     // File: game.js
+
+function renderArenaBackground(floor) {
+  const backgrounds = [
+    {
+      from: 1,
+      to: 10,
+      image: './assets/backgrounds/training.png',
+      position: 'center 58%'
+    }
+
+    // 他のエリアの背景を用意したら、
+    // この配列へ設定を追加する。
+  ];
+
+  const config = backgrounds.find((item) => {
+    return floor >= item.from && floor <= item.to;
+  });
+
+  const arena = $('emptyArena').closest('.arena');
+
+  if (!config) {
+    // 未登録エリアではCSSの代替背景を使用する。
+    arena.style.removeProperty('background-image');
+    arena.style.removeProperty('background-position');
+    return;
+  }
+
+  // 薄い暗色レイヤーで、敵と文字を見やすくする。
+  // 画像が読み込めなくても背景色は残る。
+  arena.style.backgroundImage = [
+    'linear-gradient(rgba(8, 12, 22, 0.18), rgba(8, 12, 22, 0.28))',
+    'url("' + config.image + '")'
+  ].join(', ');
+
+  arena.style.backgroundPosition = config.position;
+} }
 
       render();
       status(message);
