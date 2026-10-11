@@ -78,9 +78,9 @@ window.TQ_DATA = {
         'フェニックスロード'
       ],
       portraits: [
-        './assets/characters/leon_r1.webp',
-        './assets/characters/leon_r3.webp',
-        './assets/characters/leon_r5.webp'
+        './assets/characters/leon_r1.PNG',
+        './assets/characters/leon_r3.PNG',
+        './assets/characters/leon_r5.PNG'
       ],
       skills: [
         'flame_edge',
@@ -101,9 +101,9 @@ window.TQ_DATA = {
         'オーシャンエンプレス'
       ],
       portraits: [
-        './assets/characters/serena_r1.webp',
-        './assets/characters/serena_r3.webp',
-        './assets/characters/serena_r5.webp'
+        './assets/characters/serena_r1.PNG',
+        './assets/characters/serena_r3.PNG',
+        './assets/characters/serena_r5.PNG'
       ],
       skills: [
         'aqua_lance',
@@ -124,9 +124,9 @@ window.TQ_DATA = {
         'ライトニングヴァルキリー'
       ],
       portraits: [
-        './assets/characters/rizel_r1.webp',
-        './assets/characters/rizel_r3.webp',
-        './assets/characters/rizel_r5.webp'
+        './assets/characters/rizel_r1.PNG',
+        './assets/characters/rizel_r3.PNG',
+        './assets/characters/rizel_r5.PNG'
       ],
       skills: [
         'bolt_rush',
@@ -147,9 +147,9 @@ window.TQ_DATA = {
         'アストラルセラフ'
       ],
       portraits: [
-        './assets/characters/lumina_r1.webp',
-        './assets/characters/lumina_r3.webp',
-        './assets/characters/lumina_r5.webp'
+        './assets/characters/lumina_r1.PNG',
+        './assets/characters/lumina_r3.PNG',
+        './assets/characters/lumina_r5.PNG'
       ],
       skills: [
         'ray_shot',
@@ -313,8 +313,8 @@ window.TQ_DATA = {
       name: 'スパークスライム',
       bossName: 'スパークキング',
       element: 'thunder',
-      image: './assets/enemies/enemy_spark_slime.webp',
-      bossImage: './assets/enemies/enemy_spark_slime.webp',
+      image: './assets/enemies/e001.PNG',
+      bossImage: './assets/enemies/e001.PNG',
       hpRate: 0.85,
       atkRate: 0.75,
       defRate: 0.6
@@ -324,8 +324,8 @@ window.TQ_DATA = {
       name: 'ボルトバット',
       bossName: 'ボルトウィング',
       element: 'thunder',
-      image: './assets/enemies/enemy_bolt_bat.webp',
-      bossImage: './assets/enemies/enemy_bolt_bat.webp',
+      image: './assets/enemies/e002.PNG',
+      bossImage: './assets/enemies/e002.PNG',
       hpRate: 0.8,
       atkRate: 1.2,
       defRate: 0.65
@@ -335,8 +335,8 @@ window.TQ_DATA = {
       name: 'ギアパペット',
       bossName: 'ギアコマンダー',
       element: 'thunder',
-      image: './assets/enemies/enemy_gear_puppet.webp',
-      bossImage: './assets/enemies/enemy_gear_puppet.webp',
+      image: './assets/enemies/e003.PNG',
+      bossImage: './assets/enemies/e003.PNG',
       hpRate: 1,
       atkRate: 1,
       defRate: 1
@@ -346,8 +346,8 @@ window.TQ_DATA = {
       name: 'ストーンガード',
       bossName: 'ストーンセンチネル',
       element: 'thunder',
-      image: './assets/enemies/enemy_stone_guard.webp',
-      bossImage: './assets/enemies/enemy_stone_guard.webp',
+      image: './assets/enemies/e004.PNG',
+      bossImage: './assets/enemies/e004.PNG',
       hpRate: 1.2,
       atkRate: 0.85,
       defRate: 1.6
@@ -357,8 +357,8 @@ window.TQ_DATA = {
       name: 'アイアンゴーレム',
       bossName: 'アイアンゴーレム',
       element: 'thunder',
-      image: './assets/enemies/boss_iron_golem.webp',
-      bossImage: './assets/enemies/boss_iron_golem.webp',
+      image: './assets/enemies/b001.PNG',
+      bossImage: './assets/enemies/b001.PNG',
       hpRate: 1,
       atkRate: 1,
       defRate: 1.25
