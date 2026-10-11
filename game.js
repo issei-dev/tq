@@ -464,40 +464,123 @@ function freshSave() {
     return battle;
   }
 
-  function normalizeSave(raw) {
-    if (!raw || typeof raw !== 'object') {
-      throw new Error('セーブデータが不正です。');
-    }
+  // File: game.js
 
-    const gas = raw.game !== 'towerquest-pages' &&
-      Array.isArray(raw.party) &&
-      raw.clearedFloor !== undefined;
+function normalizeSave(raw) {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('セーブデータが不正です。');
+  }
 
-    const pages = raw.game === 'towerquest-pages' &&
-      [1, 2, 3].includes(raw.schemaVersion);
+  const gas = raw.game !== 'towerquest-pages' &&
+    Array.isArray(raw.party) &&
+    raw.clearedFloor !== undefined;
 
-    if (!gas && !pages) {
-      throw new Error('対応していないセーブ形式です。');
-    }
+  const pages = raw.game === 'towerquest-pages' &&
+    [1, 2, 3].includes(raw.schemaVersion);
 
-    const migrated = gas || raw.schemaVersion !== SCHEMA_VERSION;
-    const oldRanks = gas || raw.schemaVersion === 1;
-    const party = validateParty(raw.party, oldRanks);
+  if (!gas && !pages) {
+    throw new Error('対応していないセーブ形式です。');
+  }
 
-    let originalCleared;
+  const migrated = gas || raw.schemaVersion !== SCHEMA_VERSION;
+  const oldRanks = gas || raw.schemaVersion === 1;
+  const party = validateParty(raw.party, oldRanks);
 
-    if (gas) {
-      originalCleared =
-        integer(raw.clearedFloor, 0, 100, '旧突破階層') *
-        D.rules.stagesPerFloor;
-    } else {
-      originalCleared = integer(
-        raw.highestCleared,
-        0,
-        migrated ? 1000 : maxStage,
-        '突破ステージ'
+  let originalCleared;
+
+  if (gas) {
+    originalCleared =
+      integer(raw.clearedFloor, 0, 100, '旧突破階層') *
+      D.rules.stagesPerFloor;
+  } else {
+    originalCleared = integer(
+      raw.highestCleared,
+      0,
+      migrated ? 1000 : maxStage,
+      '突破ステージ'
+    );
+  }
+
+  const cleared = Math.min(originalCleared, maxStage);
+
+  const selected = migrated
+    ? Math.min(cleared + 1, maxStage)
+    : integer(
+        raw.selectedStage,
+        1,
+        maxStage,
+        '選択ステージ'
       );
-    }
+
+  if (selected > Math.min(cleared + 1, maxStage)) {
+    throw new Error('選択ステージが未解放です。');
+  }
+
+  const base = {
+    game: 'towerquest-pages',
+    schemaVersion: SCHEMA_VERSION,
+    revision: gas
+      ? 0
+      : integer(
+          raw.revision ?? 0,
+          0,
+          Number.MAX_SAFE_INTEGER,
+          '保存番号'
+        ),
+    coins: integer(
+      raw.coins,
+      0,
+      Number.MAX_SAFE_INTEGER,
+      'コイン'
+    ),
+    highestCleared: cleared,
+    selectedStage: selected,
+    party,
+    battle: null,
+    updatedAt: new Date().toISOString()
+  };
+
+  // 旧ランクのセーブは、変換済みpartyから所持情報を作成する。
+  const collectionSource = oldRanks
+    ? base
+    : raw;
+
+  const value = window.TQ_COLLECTION.hydrate(
+    base,
+    collectionSource
+  );
+
+  const battleReset = !!raw.battle &&
+    (migrated || raw.battle.version !== D.battleVersion);
+
+  value.battle = migrated
+    ? null
+    : validateBattle(
+        raw.battle,
+        value.party,
+        cleared
+      );
+
+  // 加護表示用の戦闘開始時スナップショット。
+  if (
+    value.battle &&
+    raw.battle.blessing &&
+    typeof raw.battle.blessing.name === 'string' &&
+    typeof raw.battle.blessing.text === 'string'
+  ) {
+    value.battle.blessing = {
+      name: raw.battle.blessing.name.slice(0, 80),
+      text: raw.battle.blessing.text.slice(0, 160)
+    };
+  }
+
+  return {
+    migrated,
+    battleReset,
+    capped: originalCleared > maxStage,
+    value
+  };
+}
 
     const cleared = Math.min(originalCleared, maxStage);
 
