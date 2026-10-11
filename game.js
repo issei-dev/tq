@@ -228,24 +228,28 @@
     }
   }
 
-  function freshSave() {
-    return {
-      game: 'towerquest-pages',
-      schemaVersion: SCHEMA_VERSION,
-      revision: 0,
-      coins: 0,
-      highestCleared: 0,
-      selectedStage: 1,
-      party: D.initialParty.map((id) => ({
-        id,
-        level: 1,
-        rank: 1,
-        exp: 0
-      })),
-      battle: null,
-      updatedAt: new Date().toISOString()
-    };
-  }
+ // File: game.js
+
+function freshSave() {
+  const base = {
+    game: 'towerquest-pages',
+    schemaVersion: SCHEMA_VERSION,
+    revision: 0,
+    coins: 0,
+    highestCleared: 0,
+    selectedStage: 1,
+    party: D.initialParty.map((id) => ({
+      id,
+      level: 1,
+      rank: 1,
+      exp: 0
+    })),
+    battle: null,
+    updatedAt: new Date().toISOString()
+  };
+
+  return window.TQ_COLLECTION.hydrate(base);
+}
 
   function validateParty(raw, oldRanks) {
     if (!Array.isArray(raw) || raw.length !== 4) {
