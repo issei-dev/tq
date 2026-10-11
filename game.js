@@ -848,7 +848,7 @@ function renderArenaBackground(floor) {
     {
       from: 1,
       to: 10,
-      image: './assets/backgrounds/training.png',
+      image: './assets/backgrounds/s001.png',
       position: 'center 58%'
     }
 
