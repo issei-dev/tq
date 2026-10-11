@@ -825,3 +825,106 @@ select {
 .app.is-animating .character.dead {
   opacity: 0.35;
 }
+/* File: style.css */
+
+.blessing-status {
+  padding: 6px 8px;
+  color: #e2eaff;
+  background: rgba(8, 12, 22, 0.55);
+  font-size: 10px;
+  line-height: 1.4;
+  text-align: center;
+  text-shadow: 0 1px 2px #000;
+}
+
+.collection-tabs {
+  margin-bottom: 14px;
+}
+
+.collection-tabs button[aria-pressed="true"] {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.collection-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.collection-card {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #101725;
+}
+
+.collection-card strong {
+  display: block;
+  margin-top: 7px;
+  font-size: 13px;
+}
+
+.collection-card p {
+  margin: 5px 0;
+}
+
+.collection-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: contain;
+}
+
+.collection-image.spirit-image {
+  aspect-ratio: 2 / 3;
+}
+
+.collection-equipped {
+  color: var(--gold);
+  font-size: 11px;
+}
+
+.formation-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.formation-slot {
+  display: block;
+}
+
+.formation-preview {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #101725;
+}
+
+.formation-preview .spirit-image {
+  width: 100px;
+  max-width: 100%;
+  margin: 0 auto 8px;
+}
+
+.formation-preview strong {
+  display: block;
+  text-align: center;
+}
+
+.formation-preview p {
+  margin: 6px 0;
+}
+
+@media (max-width: 360px) {
+  .collection-grid {
+    gap: 8px;
+  }
+
+  .collection-card {
+    padding: 7px;
+  }
+}
