@@ -531,3 +531,113 @@ select {
     transition: width 0.15s;
   }
 }
+/* File: style.css */
+
+/* ========================================
+   敵と味方に連続した戦闘背景を表示
+   ======================================== */
+
+.arena.shared-battle-area {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 0;
+  margin-top: 8px;
+  padding: 0;
+  border-radius: 14px;
+
+  /* 背景が未登録の場合の代替表示。 */
+  background-color: #111827;
+  background-image:
+    radial-gradient(
+      ellipse at 50% 85%,
+      #353957,
+      transparent 65%
+    ),
+    linear-gradient(
+      #192237,
+      #101621
+    );
+
+  background-size: cover;
+  background-position: center 58%;
+  background-repeat: no-repeat;
+}
+
+/* 敵側には独立した背景を付けない。 */
+.shared-battle-area .enemy-area {
+  position: relative;
+  padding: 8px 6px 0;
+  background: transparent;
+}
+
+/* 味方の列幅と画像サイズは維持する。 */
+.shared-battle-area #party {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 0;
+  background: transparent;
+}
+
+/* 敵と味方のカードは引き続きフレームレス。 */
+.shared-battle-area .enemy,
+.shared-battle-area .character {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* 敵画像の表示比率。 */
+.shared-battle-area .enemy .portrait-frame {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+
+/* 味方画像の表示比率。 */
+.shared-battle-area .character .portrait-frame {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+}
+
+/* 透過画像を伸ばさず表示する。 */
+.shared-battle-area .enemy-image,
+.shared-battle-area .character-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+/* 名前・属性・HPは半透明パネルで読みやすくする。 */
+.shared-battle-area .portrait-overlay {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(8, 12, 22, 0.78) 30%,
+    rgba(8, 12, 22, 0.94) 100%
+  );
+}
+
+/* 共通背景エリアとコマンドの間隔。 */
+#commands {
+  margin-top: 4px;
+}
+
+@media (max-width: 360px) {
+  .shared-battle-area #party {
+    gap: 4px;
+  }
+
+  .shared-battle-area .enemy-area {
+    padding-right: 4px;
+    padding-left: 4px;
+  }
+}
