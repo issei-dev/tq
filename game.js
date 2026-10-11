@@ -4,26 +4,24 @@
 
 (() => {
   const D = window.TQ_DATA;
-
-  // 旧版と同じキーを使い、自動移行する。
   const SAVE_KEY = 'towerquest.pages.save.v1';
   const OLD_BACKUP_KEY = 'towerquest.pages.pre-rank3.backup';
   const SCHEMA_VERSION = 2;
-  const MAX_STAGE = D.rules.floors * D.rules.stagesPerFloor;
 
   const $ = (id) => document.getElementById(id);
   const clone = (value) => JSON.parse(JSON.stringify(value));
   const number = (value) => Number(value).toLocaleString('ja-JP');
 
-  const characters = new Map(D.characters.map((item) => [item.id, item]));
-  const enemies = new Map(D.enemies.map((item) => [item.id, item]));
-  const skills = new Map(D.skills.map((item) => [item.id, item]));
-
-  let save;
+  let save = null;
   let busy = false;
   let fatal = false;
   let pendingHeal = null;
   let selectedEnemy = 0;
+
+  let MAX_STAGE = 0;
+  let characters = new Map();
+  let enemies = new Map();
+  let skills = new Map();
 
   function node(tag, className, text) {
     const element = document.createElement(tag);
@@ -36,6 +34,10 @@
       element.textContent = text;
     }
 
+    if (tag === 'button') {
+      element.type = 'button';
+    }
+
     return element;
   }
 
@@ -44,7 +46,11 @@
   }
 
   function integer(value, min, max, label) {
-    if (!Number.isSafeInteger(value) || value < min || value > max) {
+    if (
+      !Number.isSafeInteger(value) ||
+      value < min ||
+      value > max
+    ) {
       throw new Error(label + 'が不正です。');
     }
 
@@ -52,7 +58,11 @@
   }
 
   function finite(value, min, max, label) {
-    if (!Number.isFinite(value) || value < min || value > max) {
+    if (
+      !Number.isFinite(value) ||
+      value < min ||
+      value > max
+    ) {
       throw new Error(label + 'が不正です。');
     }
 
@@ -60,7 +70,9 @@
   }
 
   function rankDefinition(rank) {
-    const result = D.rankDefinitions.find((item) => item.rank === rank);
+    const result = D.rankDefinitions.find((item) => {
+      return item.rank === rank;
+    });
 
     if (!result) {
       throw new Error('ランク定義がありません。');
@@ -94,34 +106,49 @@
         : '';
 
       const defense = skill.defenseScale !== undefined
-        ? '。敵DEFを' + Math.round(skill.defenseScale * 100) + '％として計算'
+        ? '。敵DEFを' +
+          Math.round(skill.defenseScale * 100) +
+          '％として計算'
         : '';
 
-      return target + 'ATK×' + skill.power + hits + defense;
+      return target +
+        'ATK×' +
+        skill.power +
+        hits +
+        defense;
     }
 
     if (skill.type === 'heal') {
-      return '生存中の味方1人をATK×' + skill.power + '回復';
+      return '生存中の味方1人をATK×' +
+        skill.power +
+        '回復';
     }
 
     if (skill.type === 'buff') {
-      return 'この手番の通常攻撃ダメージ×' + skill.power;
+      return 'この手番の通常攻撃ダメージ×' +
+        skill.power;
     }
 
     if (skill.type === 'weaken') {
       return '次の敵フェーズの敵ATKを' +
-        Math.round((1 - skill.power) * 100) + '％低下';
+        Math.round((1 - skill.power) * 100) +
+        '％低下';
     }
 
     if (skill.type === 'mark') {
-      return '敵が次に受ける1発のダメージ×' + skill.power;
+      return '敵が次に受ける1発のダメージ×' +
+        skill.power;
     }
 
     if (skill.type === 'cover') {
       const reduction = Math.round(skill.reduction * 100);
 
       return '次の自分の手番まで単体攻撃をかばう' +
-        (reduction ? '。単体被ダメージ' + reduction + '％軽減' : '');
+        (
+          reduction
+            ? '。単体被ダメージ' + reduction + '％軽減'
+            : ''
+        );
     }
 
     return '';
@@ -139,15 +166,29 @@
 
   function stageName(index) {
     const info = stageInfo(index);
+
     return info.floor + '-' + info.stage;
   }
 
   function areaFor(floor) {
-    return D.areas.find((area) => floor >= area.from && floor <= area.to);
+    const area = D.areas.find((item) => {
+      return floor >= item.from && floor <= item.to;
+    });
+
+    if (!area) {
+      throw new Error('エリア定義がありません。');
+    }
+
+    return area;
   }
 
   function stats(member) {
     const definition = characters.get(member.id);
+
+    if (!definition) {
+      throw new Error('キャラクター定義がありません。');
+    }
+
     const multiplier = rankDefinition(member.rank).statMultiplier;
     const result = {};
 
@@ -177,11 +218,17 @@
 
     return {
       exp: Math.floor(
-        (config.expBase + config.expQuadratic * index * index) *
+        (
+          config.expBase +
+          config.expQuadratic * index * index
+        ) *
         (boss ? config.bossExpMultiplier : 1)
       ),
       coins: Math.floor(
-        (config.coinBase + config.coinPerStage * index) *
+        (
+          config.coinBase +
+          config.coinPerStage * index
+        ) *
         (boss ? config.bossCoinMultiplier : 1)
       )
     };
@@ -238,7 +285,11 @@
     const seen = new Set();
 
     return raw.map((member) => {
-      if (!member || !characters.has(member.id) || seen.has(member.id)) {
+      if (
+        !member ||
+        !characters.has(member.id) ||
+        seen.has(member.id)
+      ) {
         throw new Error('キャラクターが不正です。');
       }
 
@@ -271,8 +322,14 @@
       );
 
       if (
-        (level === D.rules.maxLevel && exp !== 0) ||
-        (level < D.rules.maxLevel && exp >= neededExp(level))
+        (
+          level === D.rules.maxLevel &&
+          exp !== 0
+        ) ||
+        (
+          level < D.rules.maxLevel &&
+          exp >= neededExp(level)
+        )
       ) {
         throw new Error('経験値とレベルが一致しません。');
       }
@@ -317,7 +374,12 @@
       throw new Error('戦闘状態が不正です。');
     }
 
-    const index = integer(raw.index, 1, MAX_STAGE, '戦闘ステージ');
+    const index = integer(
+      raw.index,
+      1,
+      MAX_STAGE,
+      '戦闘ステージ'
+    );
 
     if (index > Math.min(highestCleared + 1, MAX_STAGE)) {
       throw new Error('未解放ステージの戦闘です。');
@@ -349,7 +411,9 @@
       actor: raw.actor,
       rewards: null,
       log: Array.isArray(raw.log)
-        ? raw.log.slice(-40).map((line) => String(line).slice(0, 300))
+        ? raw.log.slice(-40).map((line) => {
+            return String(line).slice(0, 300);
+          })
         : [],
       allies: [],
       enemies: []
@@ -359,7 +423,11 @@
       const member = party[i];
       const definition = characters.get(member.id);
 
-      if (ally.id !== member.id || ally.rank !== member.rank) {
+      if (
+        !ally ||
+        ally.id !== member.id ||
+        ally.rank !== member.rank
+      ) {
         throw new Error('戦闘中のパーティが一致しません。');
       }
 
@@ -377,7 +445,9 @@
         !Array.isArray(ally.usedSkills) ||
         ally.cooldowns.length !== definition.skills.length ||
         ally.usedSkills.length !== definition.skills.length ||
-        !ally.usedSkills.every((value) => typeof value === 'boolean')
+        !ally.usedSkills.every((value) => {
+          return typeof value === 'boolean';
+        })
       ) {
         throw new Error('味方の効果状態が不正です。');
       }
@@ -404,6 +474,7 @@
 
     raw.enemies.forEach((enemy) => {
       if (
+        !enemy ||
         !enemies.has(enemy.id) ||
         !D.elements[enemy.element] ||
         !marks.includes(enemy.mark) ||
@@ -430,8 +501,13 @@
       });
     });
 
-    const enemiesAlive = battle.enemies.some((enemy) => enemy.hp > 0);
-    const alliesAlive = battle.allies.some((ally) => ally.hp > 0);
+    const enemiesAlive = battle.enemies.some((enemy) => {
+      return enemy.hp > 0;
+    });
+
+    const alliesAlive = battle.allies.some((ally) => {
+      return ally.hp > 0;
+    });
 
     if (battle.state === 'active') {
       if (
@@ -448,7 +524,12 @@
     }
 
     if (battle.state === 'won') {
-      if (enemiesAlive || highestCleared < index || !raw.rewards) {
+      if (
+        enemiesAlive ||
+        !alliesAlive ||
+        highestCleared < index ||
+        !raw.rewards
+      ) {
         throw new Error('勝利状態が不正です。');
       }
 
@@ -466,7 +547,9 @@
           '報酬コイン'
         ),
         levelUps: Array.isArray(raw.rewards.levelUps)
-          ? raw.rewards.levelUps.map((text) => String(text).slice(0, 100))
+          ? raw.rewards.levelUps.map((text) => {
+              return String(text).slice(0, 100);
+            })
           : []
       };
     }
@@ -497,13 +580,27 @@
     const party = validateParty(raw.party, migrated);
 
     const highestCleared = gasSave
-      ? integer(raw.clearedFloor, 0, D.rules.floors, '突破階層') *
-        D.rules.stagesPerFloor
-      : integer(raw.highestCleared, 0, MAX_STAGE, '突破ステージ');
+      ? integer(
+          raw.clearedFloor,
+          0,
+          D.rules.floors,
+          '突破階層'
+        ) * D.rules.stagesPerFloor
+      : integer(
+          raw.highestCleared,
+          0,
+          MAX_STAGE,
+          '突破ステージ'
+        );
 
     const selectedStage = gasSave
       ? Math.min(highestCleared + 1, MAX_STAGE)
-      : integer(raw.selectedStage, 1, MAX_STAGE, '選択ステージ');
+      : integer(
+          raw.selectedStage,
+          1,
+          MAX_STAGE,
+          '選択ステージ'
+        );
 
     if (selectedStage > Math.min(highestCleared + 1, MAX_STAGE)) {
       throw new Error('選択ステージが未解放です。');
@@ -547,16 +644,70 @@
 
   function persist() {
     save.updatedAt = new Date().toISOString();
-    localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+
+    localStorage.setItem(
+      SAVE_KEY,
+      JSON.stringify(save)
+    );
   }
 
   function validateMaster() {
+    if (
+      !D ||
+      !D.rules ||
+      !Array.isArray(D.rankDefinitions) ||
+      !Array.isArray(D.characters) ||
+      !Array.isArray(D.enemies) ||
+      !Array.isArray(D.skills) ||
+      !Array.isArray(D.initialParty) ||
+      !Array.isArray(D.areas) ||
+      !Array.isArray(D.encounters) ||
+      !D.balance
+    ) {
+      throw new Error('data.jsを正しく読み込めません。');
+    }
+
+    integer(D.rules.floors, 1, 1000, '階層数');
+    integer(D.rules.stagesPerFloor, 1, 100, 'ステージ数');
+    integer(D.rules.maxLevel, 1, 999, '最大レベル');
+
     integer(
       D.rules.maxRank,
       1,
       D.rankDefinitions.length,
       '最大ランク'
     );
+
+    integer(D.battleVersion, 1, 1000000, '戦闘バージョン');
+
+    MAX_STAGE = D.rules.floors * D.rules.stagesPerFloor;
+
+    characters = new Map(
+      D.characters.map((item) => [item.id, item])
+    );
+
+    enemies = new Map(
+      D.enemies.map((item) => [item.id, item])
+    );
+
+    skills = new Map(
+      D.skills.map((item) => [item.id, item])
+    );
+
+    if (
+      characters.size !== D.characters.length ||
+      enemies.size !== D.enemies.length ||
+      skills.size !== D.skills.length
+    ) {
+      throw new Error('マスターに重複したIDがあります。');
+    }
+
+    if (
+      D.initialParty.length !== 4 ||
+      new Set(D.initialParty).size !== 4
+    ) {
+      throw new Error('初期パーティは異なる4人を設定してください。');
+    }
 
     for (let rank = 1; rank <= D.rules.maxRank; rank += 1) {
       finite(
@@ -570,17 +721,40 @@
     for (const id of D.initialParty) {
       const character = characters.get(id);
 
-      if (!character) {
-        throw new Error('初期キャラクターがありません。');
+      if (!character || !D.elements[character.element]) {
+        throw new Error('初期キャラクターの定義が不正です。');
       }
 
-      if (character.jobs.length < D.rules.maxRank) {
-        throw new Error('ランク別ジョブが不足しています。');
+      if (
+        !Array.isArray(character.jobs) ||
+        character.jobs.length < D.rules.maxRank ||
+        !Array.isArray(character.portraits) ||
+        !Array.isArray(character.skills) ||
+        character.skills.length !== 3
+      ) {
+        throw new Error('キャラクターのランク別設定が不足しています。');
+      }
+
+      for (const key of ['hp', 'atk', 'def']) {
+        integer(
+          character.base[key],
+          key === 'def' ? 0 : 1,
+          1000000,
+          '初期ステータス'
+        );
+
+        integer(
+          character.growth[key],
+          0,
+          1000000,
+          '成長量'
+        );
       }
 
       for (const skillId of character.skills) {
         for (let rank = 1; rank <= D.rules.maxRank; rank += 1) {
           const skill = skillFor(skillId, rank);
+
           integer(skill.cooldown, 1, 1000, '待ち時間');
 
           if (skill.type === 'cover') {
@@ -590,6 +764,46 @@
           } else {
             finite(skill.power, 0.01, 100, 'スキル倍率');
           }
+
+          if (skill.hits !== undefined) {
+            integer(skill.hits, 1, 20, '攻撃回数');
+          }
+
+          if (skill.defenseScale !== undefined) {
+            finite(skill.defenseScale, 0, 1, '防御参照倍率');
+          }
+        }
+      }
+    }
+
+    for (let floor = 1; floor <= D.rules.floors; floor += 1) {
+      areaFor(floor);
+
+      const encounter = D.encounters.find((item) => {
+        return floor >= item.from && floor <= item.to;
+      });
+
+      const rounds = D.balance.roundTargets.find((item) => {
+        return floor >= item.from && floor <= item.to;
+      });
+
+      if (
+        !encounter ||
+        !Array.isArray(encounter.normal) ||
+        !encounter.normal.length ||
+        !Array.isArray(encounter.bosses) ||
+        !encounter.bosses.length ||
+        !rounds
+      ) {
+        throw new Error('階層の出現設定またはバランス設定が不足しています。');
+      }
+
+      for (const id of [
+        ...encounter.normal,
+        ...encounter.bosses
+      ]) {
+        if (!enemies.has(id)) {
+          throw new Error('出現する敵の定義がありません：' + id);
         }
       }
     }
@@ -607,17 +821,21 @@
         save = result.value;
 
         if (result.migrated) {
-          // 自動移行前のデータを別キーに保存。
           if (!localStorage.getItem(OLD_BACKUP_KEY)) {
-            localStorage.setItem(OLD_BACKUP_KEY, rawText);
+            localStorage.setItem(
+              OLD_BACKUP_KEY,
+              rawText
+            );
           }
 
           save.revision += 1;
           persist();
+
           message = '旧セーブを最大ランク3の仕様へ移行しました';
         } else if (result.battleReset) {
           save.revision += 1;
           persist();
+
           message = '戦闘仕様の更新に伴い、戦闘途中の状態を解除しました';
         }
       } else {
@@ -630,8 +848,10 @@
     } catch (error) {
       fatal = true;
       $('openManagement').disabled = true;
+
       $('result').textContent =
         '起動できませんでした。保存データは自動で削除していません。';
+
       status('起動エラー：' + error.message);
     }
   }
@@ -646,18 +866,21 @@
     const disk = JSON.parse(raw);
 
     if (disk.revision !== save.revision) {
-      throw new Error('別タブで進行が変更されました。再読み込みしてください。');
+      throw new Error(
+        '別タブで進行が変更されました。再読み込みしてください。'
+      );
     }
   }
 
   function transact(action) {
-    if (busy || fatal) {
+    if (busy || fatal || !save) {
       return false;
     }
 
     const previous = clone(save);
     busy = true;
     let success = false;
+    let errorMessage = '';
 
     try {
       checkRevision();
@@ -670,25 +893,28 @@
       success = true;
     } catch (error) {
       save = previous;
-      status('操作を確定できませんでした：' + error.message);
+      errorMessage = error.message;
     } finally {
       busy = false;
-      render();
     }
+
+    render();
 
     if (success) {
       status('保存済み');
+    } else {
+      status('操作を確定できませんでした：' + errorMessage);
     }
 
     return success;
   }
 
   function isActive() {
-    return !!save.battle && save.battle.state === 'active';
+    return !!save &&
+      !!save.battle &&
+      save.battle.state === 'active';
   }
 
-  // 敵の強さは現在のプレイヤーには連動させない。
-  // 初回クリアだけで進んだ場合の想定育成値を利用する。
   function referenceMember(index) {
     const member = {
       id: 'leon',
@@ -723,12 +949,16 @@
       return floor >= item.from && floor <= item.to;
     });
 
+    if (!config) {
+      throw new Error('戦闘ラウンド設定がありません。');
+    }
+
     return boss ? config.boss : config.normal;
   }
 
   function encounterIds(index) {
     const info = stageInfo(index);
-    const override = D.stageOverrides[stageName(index)];
+    const override = D.stageOverrides?.[stageName(index)];
 
     if (override && Array.isArray(override.enemies)) {
       return override.enemies;
@@ -738,10 +968,18 @@
       return info.floor >= item.from && info.floor <= item.to;
     });
 
-    const pool = info.boss ? group.bosses : group.normal;
+    if (!group) {
+      throw new Error('敵の出現設定がありません。');
+    }
+
+    const pool = info.boss
+      ? group.bosses
+      : group.normal;
 
     if (info.boss) {
-      return [pool[(info.floor - 1) % pool.length]];
+      return [
+        pool[(info.floor - 1) % pool.length]
+      ];
     }
 
     const count = info.floor <= 2
@@ -751,7 +989,9 @@
         : 2;
 
     return Array.from({ length: count }, (_, i) => {
-      return pool[(info.floor + info.stage + i - 2) % pool.length];
+      return pool[
+        (info.floor + info.stage + i - 2) % pool.length
+      ];
     });
   }
 
@@ -761,7 +1001,9 @@
     const ids = encounterIds(index);
     const reference = referenceMember(index);
     const value = stats(reference);
-    const override = D.stageOverrides[stageName(index)] || {};
+
+    const override =
+      D.stageOverrides?.[stageName(index)] || {};
 
     if (ids.length < 1 || ids.length > 3) {
       throw new Error('敵は1〜3体で設定してください。');
@@ -769,6 +1011,19 @@
 
     const damageFactor =
       D.balance.averageDamageFactors[reference.rank - 1];
+
+    finite(
+      damageFactor,
+      0.01,
+      100,
+      '想定ダメージ係数'
+    );
+
+    const hpMultiplier = override.hpMultiplier ?? 1;
+    const atkMultiplier = override.atkMultiplier ?? 1;
+
+    finite(hpMultiplier, 0.01, 100, '敵HP補正');
+    finite(atkMultiplier, 0.01, 100, '敵ATK補正');
 
     const totalHp = value.atk *
       4 *
@@ -787,7 +1042,7 @@
         Math.floor(
           totalHp / ids.length *
           definition.hpRate *
-          (override.hpMultiplier ?? 1)
+          hpMultiplier
         )
       );
 
@@ -796,10 +1051,12 @@
         Math.floor(
           (
             value.def / 2 +
-            value.hp * (info.boss ? 0.14 : 0.09) / ids.length
+            value.hp *
+            (info.boss ? 0.14 : 0.09) /
+            ids.length
           ) *
           definition.atkRate *
-          (override.atkMultiplier ?? 1)
+          atkMultiplier
         )
       );
 
@@ -815,14 +1072,19 @@
         name = '深淵王アビス・レガリア（仮画像）';
       }
 
-      if (!info.boss && ids.filter((item) => item === id).length > 1) {
+      if (
+        !info.boss &&
+        ids.filter((item) => item === id).length > 1
+      ) {
         name += ' ' + (i + 1);
       }
 
       return {
         id,
         name,
-        element: info.floor <= 10 ? definition.element : area.element,
+        element: info.floor <= 10
+          ? definition.element
+          : area.element,
         maxHp,
         hp: maxHp,
         atk,
@@ -862,7 +1124,9 @@
       round: 1,
       actor: 0,
       rewards: null,
-      log: [stageName(index) + '：戦闘開始'],
+      log: [
+        stageName(index) + '：戦闘開始'
+      ],
       allies: save.party.map((member) => {
         const value = stats(member);
         const definition = characters.get(member.id);
@@ -924,10 +1188,18 @@
       return battle.enemies[selectedEnemy];
     }
 
-    return battle.enemies.find((enemy) => enemy.hp > 0);
+    return battle.enemies.find((enemy) => {
+      return enemy.hp > 0;
+    });
   }
 
-  function hitEnemy(actor, enemy, power, defenseScale = 1, modifier = 1) {
+  function hitEnemy(
+    actor,
+    enemy,
+    power,
+    defenseScale = 1,
+    modifier = 1
+  ) {
     if (!enemy || enemy.hp <= 0) {
       return;
     }
@@ -936,7 +1208,8 @@
 
     const base = Math.max(
       1,
-      actor.atk * power - enemy.def * defenseScale / 2
+      actor.atk * power -
+      enemy.def * defenseScale / 2
     );
 
     const amount = Math.max(
@@ -953,20 +1226,36 @@
     enemy.hp = Math.max(0, enemy.hp - amount);
 
     addLog(
-      definition.name + ' → ' + enemy.name + '：' + number(amount)
+      definition.name +
+      ' → ' +
+      enemy.name +
+      '：' +
+      number(amount)
     );
   }
 
   function useSkill(actor, slot, allyIndex) {
     const definition = characters.get(actor.id);
 
-    integer(slot, 0, definition.skills.length - 1, 'スキル');
+    integer(
+      slot,
+      0,
+      definition.skills.length - 1,
+      'スキル'
+    );
 
-    if (actor.cooldowns[slot] > 0 || actor.usedSkills[slot]) {
+    if (
+      actor.cooldowns[slot] > 0 ||
+      actor.usedSkills[slot]
+    ) {
       throw new Error('そのスキルは使用できません。');
     }
 
-    const skill = skillFor(definition.skills[slot], actor.rank);
+    const skill = skillFor(
+      definition.skills[slot],
+      actor.rank
+    );
+
     const battle = save.battle;
     const enemy = targetEnemy();
 
@@ -978,7 +1267,11 @@
         : [enemy];
 
       for (const target of targets) {
-        for (let hit = 0; hit < (skill.hits || 1); hit += 1) {
+        for (
+          let hit = 0;
+          hit < (skill.hits || 1);
+          hit += 1
+        ) {
           hitEnemy(
             actor,
             target,
@@ -988,7 +1281,12 @@
         }
       }
     } else if (skill.type === 'heal') {
-      integer(allyIndex, 0, battle.allies.length - 1, '回復対象');
+      integer(
+        allyIndex,
+        0,
+        battle.allies.length - 1,
+        '回復対象'
+      );
 
       const target = battle.allies[allyIndex];
 
@@ -1004,9 +1302,12 @@
       );
 
       addLog(
-        skill.name + '：' +
-        characters.get(target.id).name + 'を' +
-        number(target.hp - before) + '回復'
+        skill.name +
+        '：' +
+        characters.get(target.id).name +
+        'を' +
+        number(target.hp - before) +
+        '回復'
       );
     } else if (skill.type === 'buff') {
       actor.attackBuff = skill.power;
@@ -1022,8 +1323,18 @@
 
       addLog(skill.name + '：敵の攻撃力が低下');
     } else if (skill.type === 'mark') {
+      if (!enemy) {
+        throw new Error('攻撃対象がありません。');
+      }
+
       enemy.mark = skill.power;
-      addLog(skill.name + '：' + enemy.name + 'に光の印');
+
+      addLog(
+        skill.name +
+        '：' +
+        enemy.name +
+        'に光の印'
+      );
     } else {
       throw new Error('未対応のスキルです。');
     }
@@ -1039,14 +1350,31 @@
 
     const battle = save.battle;
     const actor = battle.allies[battle.actor];
+
+    if (!actor || actor.hp <= 0) {
+      throw new Error('行動者が不正です。');
+    }
+
     let endTurn = false;
 
     if (command === 'attack') {
-      hitEnemy(actor, targetEnemy(), 1, 1, actor.attackBuff);
+      hitEnemy(
+        actor,
+        targetEnemy(),
+        1,
+        1,
+        actor.attackBuff
+      );
+
       endTurn = true;
     } else if (command === 'defend') {
       actor.defense = true;
-      addLog(characters.get(actor.id).name + 'は防御した');
+
+      addLog(
+        characters.get(actor.id).name +
+        'は防御した'
+      );
+
       endTurn = true;
     } else if (command === 'skill') {
       useSkill(actor, slot, allyIndex);
@@ -1100,16 +1428,29 @@
     }
 
     battle.round += 1;
-    battle.actor = battle.allies.findIndex((ally) => ally.hp > 0);
+
+    battle.actor = battle.allies.findIndex((ally) => {
+      return ally.hp > 0;
+    });
+
     beginTurn(battle.allies[battle.actor]);
   }
 
-  function damageAlly(enemy, target, power, enraged, singleAttack) {
+  function damageAlly(
+    enemy,
+    target,
+    power,
+    enraged,
+    singleAttack
+  ) {
     const definition = characters.get(target.id);
 
     const base = Math.max(
       1,
-      enemy.atk * enemy.weaken * power * (enraged ? 1.15 : 1) -
+      enemy.atk *
+      enemy.weaken *
+      power *
+      (enraged ? 1.15 : 1) -
       target.def / 2
     );
 
@@ -1130,7 +1471,11 @@
     target.hp = Math.max(0, target.hp - amount);
 
     addLog(
-      enemy.name + ' → ' + definition.name + '：' + number(amount)
+      enemy.name +
+      ' → ' +
+      definition.name +
+      '：' +
+      number(amount)
     );
   }
 
@@ -1140,35 +1485,63 @@
     const big = boss && battle.round % 3 === 0;
     const sweep = big && battle.round % 6 === 0;
 
-    for (const enemy of battle.enemies.filter((item) => item.hp > 0)) {
-      const living = battle.allies.filter((ally) => ally.hp > 0);
+    const activeEnemies = battle.enemies.filter((item) => {
+      return item.hp > 0;
+    });
+
+    for (const enemy of activeEnemies) {
+      const living = battle.allies.filter((ally) => {
+        return ally.hp > 0;
+      });
 
       if (!living.length) {
         break;
       }
 
-      const enraged = boss && enemy.hp <= enemy.maxHp / 2;
+      const enraged = boss &&
+        enemy.hp <= enemy.maxHp / 2;
 
       if (sweep) {
         addLog(enemy.name + 'の全体攻撃！');
 
         for (const target of living) {
-          damageAlly(enemy, target, 0.85, enraged, false);
+          damageAlly(
+            enemy,
+            target,
+            0.85,
+            enraged,
+            false
+          );
         }
       } else {
-        let target = living[Math.floor(Math.random() * living.length)];
-        const guardian = living.find((ally) => ally.cover);
+        let target = living[
+          Math.floor(Math.random() * living.length)
+        ];
+
+        const guardian = living.find((ally) => {
+          return ally.cover;
+        });
 
         if (guardian && guardian !== target) {
           target = guardian;
-          addLog(characters.get(target.id).name + 'がかばった');
+
+          addLog(
+            characters.get(target.id).name +
+            'がかばった'
+          );
         }
 
         if (big) {
           addLog(enemy.name + 'の強打！');
         }
 
-        damageAlly(enemy, target, big ? 1.8 : 1, enraged, true);
+        damageAlly(
+          enemy,
+          target,
+          big ? 1.8 : 1,
+          enraged,
+          true
+        );
       }
     }
 
@@ -1178,7 +1551,10 @@
 
     if (battle.allies.every((ally) => ally.hp <= 0)) {
       battle.state = 'lost';
-      addLog('全滅。育成・コイン・解放済みステージは維持されます。');
+
+      addLog(
+        '全滅。育成・コイン・解放済みステージは維持されます。'
+      );
     }
   }
 
@@ -1197,7 +1573,11 @@
     }
 
     save.coins += reward.coins;
-    save.highestCleared = Math.max(save.highestCleared, battle.index);
+
+    save.highestCleared = Math.max(
+      save.highestCleared,
+      battle.index
+    );
 
     save.party.forEach((member) => {
       const before = member.level;
@@ -1206,12 +1586,16 @@
       if (member.level > before) {
         levelUps.push(
           characters.get(member.id).name +
-          ' Lv.' + before + ' → ' + member.level
+          ' Lv.' +
+          before +
+          ' → ' +
+          member.level
         );
       }
     });
 
     battle.state = 'won';
+
     battle.rewards = {
       exp: reward.exp,
       coins: reward.coins,
@@ -1219,8 +1603,10 @@
     };
 
     addLog(
-      '勝利！ EXP +' + number(reward.exp) +
-      ' / COIN +' + number(reward.coins)
+      '勝利！ EXP +' +
+      number(reward.exp) +
+      ' / COIN +' +
+      number(reward.coins)
     );
   }
 
@@ -1229,7 +1615,9 @@
       throw new Error('戦闘中は転生できません。');
     }
 
-    const member = save.party.find((item) => item.id === id);
+    const member = save.party.find((item) => {
+      return item.id === id;
+    });
 
     if (
       !member ||
@@ -1242,6 +1630,7 @@
     member.rank += 1;
     member.level = 1;
     member.exp = 0;
+
     save.battle = null;
   }
 
@@ -1268,19 +1657,31 @@
       '</svg>'
     ].join('');
 
-    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    return 'data:image/svg+xml;charset=utf-8,' +
+      encodeURIComponent(svg);
   }
 
-  function image(paths, element, className, alt, enemy) {
+  function image(
+    paths,
+    element,
+    className,
+    alt,
+    enemy
+  ) {
     const img = document.createElement('img');
     const fallback = placeholder(element, enemy);
-    const candidates = [...new Set(paths.filter(Boolean)), fallback];
+
+    const candidates = [
+      ...new Set(paths.filter(Boolean)),
+      fallback
+    ];
+
     let index = 0;
 
     img.className = className;
     img.alt = alt;
     img.decoding = 'async';
-    img.src = candidates[index];
+    img.draggable = false;
 
     img.onerror = () => {
       index += 1;
@@ -1292,12 +1693,15 @@
       }
     };
 
+    img.src = candidates[index];
+
     return img;
   }
 
   function portraitPaths(definition, rank) {
-    // 未登録の上位画像は、直前のランク画像へ順に戻す。
-    return definition.portraits.slice(0, rank).reverse();
+    return definition.portraits
+      .slice(0, rank)
+      .reverse();
   }
 
   function hpBar(hp, maxHp) {
@@ -1305,10 +1709,36 @@
     const inner = node('div', 'hp-fill');
 
     inner.style.width =
-      Math.max(0, Math.min(100, hp / maxHp * 100)) + '%';
+      Math.max(
+        0,
+        Math.min(100, hp / maxHp * 100)
+      ) + '%';
 
     outer.append(inner);
+
     return outer;
+  }
+
+  function createPortraitOverlay(
+    name,
+    meta,
+    hp,
+    maxHp
+  ) {
+    const overlay = node('div', 'portrait-overlay');
+
+    overlay.append(
+      node('div', 'overlay-name', name),
+      node('div', 'overlay-meta', meta),
+      hpBar(hp, maxHp),
+      node(
+        'div',
+        'hp-text',
+        number(hp) + ' / ' + number(maxHp)
+      )
+    );
+
+    return overlay;
   }
 
   function render() {
@@ -1316,21 +1746,37 @@
       return;
     }
 
-    $('coins').textContent = 'COIN ' + number(save.coins);
-
     const battle = save.battle;
 
-    $('stageLabel').textContent = battle
-      ? stageName(battle.index) +
-        ' / ' + areaFor(stageInfo(battle.index).floor).name +
-        (stageInfo(battle.index).boss ? '［BOSS］' : '')
-      : save.highestCleared === MAX_STAGE
-        ? '全ステージ突破'
-        : '次の攻略：' + stageName(save.highestCleared + 1);
+    const displayIndex = battle
+      ? battle.index
+      : Math.min(
+          save.highestCleared + 1,
+          MAX_STAGE
+        );
+
+    const info = stageInfo(displayIndex);
+    const area = areaFor(info.floor);
+
+    $('coins').textContent =
+      'COIN ' + number(save.coins);
+
+    $('stageLabel').textContent =
+      stageName(displayIndex) +
+      (info.boss ? ' B' : '');
+
+    $('stageLabel').title =
+      stageName(displayIndex) +
+      (info.boss ? '：ボス戦' : '：通常戦');
+
+    $('areaLabel').textContent = area.name;
+    $('areaLabel').title = area.name;
 
     $('roundLabel').textContent = battle
-      ? 'ROUND ' + battle.round
-      : '突破 ' + save.highestCleared + '/' + MAX_STAGE;
+      ? 'R ' + battle.round
+      : save.highestCleared === MAX_STAGE
+        ? 'CLEAR'
+        : 'R —';
 
     renderEnemies();
     renderParty();
@@ -1342,7 +1788,9 @@
 
     if (battle) {
       for (const line of battle.log) {
-        $('log').append(node('div', '', line));
+        $('log').append(
+          node('div', '', line)
+        );
       }
 
       $('log').scrollTop = $('log').scrollHeight;
@@ -1372,18 +1820,26 @@
       const warnings = [];
 
       if (battle.round % 6 === 0) {
-        warnings.push('全体攻撃の予兆！ 防御で備えよう');
+        warnings.push(
+          '全体攻撃の予兆！ 防御で備えよう'
+        );
       } else if (battle.round % 3 === 0) {
-        warnings.push('強打の予兆！ 防御・かばうが有効');
+        warnings.push(
+          '強打の予兆！ 防御・かばうが有効'
+        );
       }
 
       if (battle.enemies.some((enemy) => {
-        return enemy.hp > 0 && enemy.hp <= enemy.maxHp / 2;
+        return enemy.hp > 0 &&
+          enemy.hp <= enemy.maxHp / 2;
       })) {
-        warnings.push('ボス激昂：攻撃威力が上昇');
+        warnings.push(
+          'ボス激昂：攻撃威力が上昇'
+        );
       }
 
-      $('warning').textContent = warnings.join(' / ');
+      $('warning').textContent =
+        warnings.join(' / ');
     }
 
     if (
@@ -1392,7 +1848,9 @@
     ) {
       selectedEnemy = Math.max(
         0,
-        battle.enemies.findIndex((enemy) => enemy.hp > 0)
+        battle.enemies.findIndex((enemy) => {
+          return enemy.hp > 0;
+        })
       );
     }
 
@@ -1407,12 +1865,40 @@
       ].filter(Boolean).join(' ');
 
       const button = node('button', classes);
-      button.disabled = !isActive() || enemy.hp <= 0;
+      const frame = node('div', 'portrait-frame');
 
-      button.append(
+      const meta =
+        D.elements[enemy.element].name +
+        (boss ? ' / BOSS' : '');
+
+      button.disabled =
+        !isActive() ||
+        enemy.hp <= 0;
+
+      button.title = enemy.name;
+
+      button.setAttribute(
+        'aria-label',
+        enemy.name +
+        ' 属性' +
+        D.elements[enemy.element].name +
+        ' HP ' +
+        enemy.hp +
+        '/' +
+        enemy.maxHp
+      );
+
+      button.setAttribute(
+        'aria-pressed',
+        String(selectedEnemy === index)
+      );
+
+      frame.append(
         image(
           [
-            boss ? definition.bossImage : definition.image,
+            boss
+              ? definition.bossImage
+              : definition.image,
             definition.image
           ],
           enemy.element,
@@ -1420,20 +1906,21 @@
           enemy.name,
           true
         ),
-        node(
-          'div',
-          'enemy-name',
-          enemy.name + '［' + D.elements[enemy.element].name + '］'
-        ),
-        hpBar(enemy.hp, enemy.maxHp),
-        node(
-          'div',
-          'hp-text',
-          number(enemy.hp) + ' / ' + number(enemy.maxHp)
+        createPortraitOverlay(
+          enemy.name,
+          meta,
+          enemy.hp,
+          enemy.maxHp
         )
       );
 
+      button.append(frame);
+
       button.onclick = () => {
+        if (fatal || busy) {
+          return;
+        }
+
         selectedEnemy = index;
         renderEnemies();
       };
@@ -1448,26 +1935,49 @@
     save.party.forEach((member, index) => {
       const definition = characters.get(member.id);
       const value = stats(member);
-      const ally = save.battle ? save.battle.allies[index] : null;
+
+      const ally = save.battle
+        ? save.battle.allies[index]
+        : null;
 
       const hp = ally ? ally.hp : value.hp;
       const maxHp = ally ? ally.maxHp : value.hp;
 
       const classes = [
         'character',
-        isActive() && save.battle.actor === index ? 'active' : '',
+        isActive() && save.battle.actor === index
+          ? 'active'
+          : '',
         hp <= 0 ? 'dead' : '',
-        pendingHeal !== null && hp > 0 ? 'heal-target' : ''
+        pendingHeal !== null && hp > 0
+          ? 'heal-target'
+          : ''
       ].filter(Boolean).join(' ');
 
       const button = node('button', classes);
+      const frame = node('div', 'portrait-frame');
+
+      const meta =
+        D.elements[definition.element].name +
+        ' / R' +
+        member.rank +
+        ' Lv.' +
+        member.level;
 
       button.setAttribute(
         'aria-label',
-        definition.name + ' HP ' + hp + '/' + maxHp
+        definition.name +
+        ' ランク' +
+        member.rank +
+        ' レベル' +
+        member.level +
+        ' HP ' +
+        hp +
+        '/' +
+        maxHp
       );
 
-      button.append(
+      frame.append(
         image(
           portraitPaths(definition, member.rank),
           definition.element,
@@ -1475,21 +1985,31 @@
           definition.name,
           false
         ),
-        node('div', 'character-name', definition.name),
-        node(
-          'div',
-          'character-info',
-          D.elements[definition.element].name +
-          ' / R' + member.rank + ' Lv.' + member.level
-        ),
-        hpBar(hp, maxHp),
-        node('div', 'hp-text', number(hp) + '/' + number(maxHp))
+        createPortraitOverlay(
+          definition.name,
+          meta,
+          hp,
+          maxHp
+        )
       );
 
+      button.append(frame);
+
       button.onclick = () => {
-        if (pendingHeal !== null && hp > 0 && isActive()) {
+        if (fatal || busy) {
+          return;
+        }
+
+        if (
+          pendingHeal !== null &&
+          hp > 0 &&
+          isActive()
+        ) {
           const slot = pendingHeal;
-          transact(() => performAction('skill', slot, index));
+
+          transact(() => {
+            performAction('skill', slot, index);
+          });
         }
       };
 
@@ -1506,12 +2026,17 @@
       return;
     }
 
-    const actor = save.battle.allies[save.battle.actor];
+    const actor = save.battle.allies[
+      save.battle.actor
+    ];
+
     const definition = characters.get(actor.id);
 
     $('turnLabel').textContent = pendingHeal !== null
       ? '回復する味方をタップ'
-      : definition.name + 'の行動 / R' + actor.rank;
+      : definition.name +
+        'の行動 / R' +
+        actor.rank;
 
     $('attack').disabled = pendingHeal !== null;
     $('defend').disabled = pendingHeal !== null;
@@ -1520,6 +2045,7 @@
       const skill = skillFor(id, actor.rank);
       const cooldown = actor.cooldowns[slot];
       const used = actor.usedSkills[slot];
+
       const button = node('button', 'skill');
 
       button.disabled =
@@ -1528,7 +2054,11 @@
         pendingHeal !== null;
 
       button.append(
-        node('span', 'skill-name', (slot + 1) + '. ' + skill.name),
+        node(
+          'span',
+          'skill-name',
+          (slot + 1) + '. ' + skill.name
+        ),
         node(
           'span',
           'skill-description',
@@ -1541,12 +2071,18 @@
       );
 
       button.onclick = () => {
+        if (fatal || busy) {
+          return;
+        }
+
         if (skill.target === 'ally') {
           pendingHeal = slot;
           renderParty();
           renderCommands();
         } else {
-          transact(() => performAction('skill', slot));
+          transact(() => {
+            performAction('skill', slot);
+          });
         }
       };
 
@@ -1556,6 +2092,7 @@
 
   function renderResult() {
     const root = $('result');
+
     root.replaceChildren();
     root.hidden = isActive();
 
@@ -1573,20 +2110,26 @@
           : 'VICTORY'
         : 'DEFEAT';
 
-    root.append(node('div', 'result-title', title));
+    root.append(
+      node('div', 'result-title', title)
+    );
 
     if (battle && battle.rewards) {
       root.append(
         node(
           'p',
           '',
-          'EXP +' + number(battle.rewards.exp) +
-          ' / COIN +' + number(battle.rewards.coins)
+          'EXP +' +
+          number(battle.rewards.exp) +
+          ' / COIN +' +
+          number(battle.rewards.coins)
         )
       );
 
       for (const text of battle.rewards.levelUps) {
-        root.append(node('div', 'muted', text));
+        root.append(
+          node('div', 'muted', text)
+        );
       }
     }
 
@@ -1595,30 +2138,61 @@
         member.rank < D.rules.maxRank;
     })) {
       root.append(
-        node('p', 'muted', '転生可能な仲間がいます。管理画面で確認できます。')
+        node(
+          'p',
+          'muted',
+          '転生可能な仲間がいます。管理画面で確認できます。'
+        )
       );
     }
 
-    const buttons = node('div', 'result-buttons');
+    const buttons = node(
+      'div',
+      'result-buttons'
+    );
 
     function addButton(label, index, primary) {
-      const button = node('button', primary ? 'primary' : '', label);
-      button.onclick = () => transact(() => startBattle(index));
+      const button = node(
+        'button',
+        primary ? 'primary' : '',
+        label
+      );
+
+      button.onclick = () => {
+        transact(() => {
+          startBattle(index);
+        });
+      };
+
       buttons.append(button);
     }
 
     if (!battle) {
       addButton(
         '挑戦する',
-        Math.min(save.highestCleared + 1, MAX_STAGE),
+        Math.min(
+          save.highestCleared + 1,
+          MAX_STAGE
+        ),
         true
       );
     } else {
-      if (battle.state === 'won' && battle.index < MAX_STAGE) {
-        addButton('次のステージへ', battle.index + 1, true);
+      if (
+        battle.state === 'won' &&
+        battle.index < MAX_STAGE
+      ) {
+        addButton(
+          '次のステージへ',
+          battle.index + 1,
+          true
+        );
       }
 
-      addButton('同じステージに挑戦', battle.index, false);
+      addButton(
+        '同じステージに挑戦',
+        battle.index,
+        false
+      );
     }
 
     root.append(buttons);
@@ -1626,34 +2200,55 @@
 
   function renderManagement() {
     $('progressText').textContent =
-      '突破済み：' + save.highestCleared + 'ステージ / ' +
-      '突破階層：' +
-      Math.floor(save.highestCleared / D.rules.stagesPerFloor) + '階';
+      '突破済み：' +
+      save.highestCleared +
+      'ステージ / 突破階層：' +
+      Math.floor(
+        save.highestCleared /
+        D.rules.stagesPerFloor
+      ) +
+      '階';
 
-    $('coinText').textContent = number(save.coins) + ' COIN';
+    $('coinText').textContent =
+      number(save.coins) + ' COIN';
 
     const floorSelect = $('floorSelect');
 
-    const previousFloor = Number(floorSelect.value) ||
+    const previousFloor =
+      Number(floorSelect.value) ||
       stageInfo(save.selectedStage).floor;
 
-    const available = Math.min(save.highestCleared + 1, MAX_STAGE);
+    const available = Math.min(
+      save.highestCleared + 1,
+      MAX_STAGE
+    );
+
     const lastFloor = stageInfo(available).floor;
 
     floorSelect.replaceChildren();
 
-    for (let floor = 1; floor <= lastFloor; floor += 1) {
+    for (
+      let floor = 1;
+      floor <= lastFloor;
+      floor += 1
+    ) {
       const option = node(
         'option',
         '',
-        floor + '階 / ' + areaFor(floor).name
+        floor +
+        '階 / ' +
+        areaFor(floor).name
       );
 
       option.value = floor;
       floorSelect.append(option);
     }
 
-    floorSelect.value = Math.min(previousFloor, lastFloor);
+    floorSelect.value = Math.min(
+      previousFloor,
+      lastFloor
+    );
+
     populateStages();
 
     $('startSelected').disabled = isActive();
@@ -1670,23 +2265,33 @@
         node(
           'strong',
           '',
-          definition.name + ' / ' + definition.jobs[member.rank - 1]
+          definition.name +
+          ' / ' +
+          definition.jobs[member.rank - 1]
         ),
         node(
           'p',
           'muted',
-          'R' + member.rank + ' Lv.' + member.level +
-          ' / HP ' + number(value.hp) +
-          ' / ATK ' + number(value.atk) +
-          ' / DEF ' + number(value.def)
+          'R' +
+          member.rank +
+          ' Lv.' +
+          member.level +
+          ' / HP ' +
+          number(value.hp) +
+          ' / ATK ' +
+          number(value.atk) +
+          ' / DEF ' +
+          number(value.def)
         ),
         node(
           'p',
           'muted',
           member.level === D.rules.maxLevel
             ? '最大レベル'
-            : 'EXP ' + number(member.exp) +
-              '/' + number(neededExp(member.level))
+            : 'EXP ' +
+              number(member.exp) +
+              '/' +
+              number(neededExp(member.level))
         )
       );
 
@@ -1697,7 +2302,9 @@
           node(
             'p',
             'muted',
-            skill.name + '：' + skillDescription(skill)
+            skill.name +
+            '：' +
+            skillDescription(skill)
           )
         );
       }
@@ -1705,7 +2312,9 @@
       const button = node(
         'button',
         '',
-        member.rank >= D.rules.maxRank ? '最大ランク' : '転生する'
+        member.rank >= D.rules.maxRank
+          ? '最大ランク'
+          : '転生する'
       );
 
       button.disabled =
@@ -1714,6 +2323,10 @@
         member.rank >= D.rules.maxRank;
 
       button.onclick = () => {
+        if (fatal || busy) {
+          return;
+        }
+
         const nextRank = member.rank + 1;
 
         const after = stats({
@@ -1721,6 +2334,15 @@
           rank: nextRank,
           level: 1
         });
+
+        const currentMultiplier =
+          rankDefinition(member.rank).statMultiplier;
+
+        const nextMultiplier =
+          rankDefinition(nextRank).statMultiplier;
+
+        const increase =
+          nextMultiplier / currentMultiplier;
 
         const message = [
           definition.name + 'を転生しますか？',
@@ -1732,13 +2354,17 @@
           'ATK ' + value.atk + ' → ' + after.atk,
           'DEF ' + value.def + ' → ' + after.def,
           '',
-          '基礎値とレベル成長量は前ランクの4倍になります。',
+          '基礎値とレベル成長量は前ランクの' +
+            increase +
+            '倍になります。',
           'スキル名と効果量も上位版へ変化します。',
           'コインとステージ解放は維持されます。'
         ].join('\n');
 
-        if (confirm(message)) {
-          transact(() => reincarnate(member.id));
+        if (window.confirm(message)) {
+          transact(() => {
+            reincarnate(member.id);
+          });
         }
       };
 
@@ -1748,37 +2374,68 @@
   }
 
   function populateStages() {
-    const floor = Number($('floorSelect').value);
-    const count = D.rules.stagesPerFloor;
-    const available = Math.min(save.highestCleared + 1, MAX_STAGE);
-    const max = Math.min(count, available - (floor - 1) * count);
+    const floor = Number(
+      $('floorSelect').value
+    );
 
-    const previous = Number($('stageSelect').value) ||
+    const count = D.rules.stagesPerFloor;
+
+    const available = Math.min(
+      save.highestCleared + 1,
+      MAX_STAGE
+    );
+
+    const max = Math.min(
+      count,
+      available - (floor - 1) * count
+    );
+
+    const selectedInfo = stageInfo(
+      save.selectedStage
+    );
+
+    const previous =
+      Number($('stageSelect').value) ||
       (
-        stageInfo(save.selectedStage).floor === floor
-          ? stageInfo(save.selectedStage).stage
+        selectedInfo.floor === floor
+          ? selectedInfo.stage
           : 1
       );
 
     $('stageSelect').replaceChildren();
 
-    for (let stage = 1; stage <= max; stage += 1) {
+    for (
+      let stage = 1;
+      stage <= max;
+      stage += 1
+    ) {
       const option = node(
         'option',
         '',
-        stage + (stage === count ? '［ボス］' : '［通常］')
+        stage +
+        (
+          stage === count
+            ? '［ボス］'
+            : '［通常］'
+        )
       );
 
       option.value = stage;
       $('stageSelect').append(option);
     }
 
-    $('stageSelect').value = Math.min(previous, max);
+    $('stageSelect').value = Math.min(
+      previous,
+      max
+    );
+
     renderPreview();
   }
 
   function selectedStageIndex() {
-    return (Number($('floorSelect').value) - 1) *
+    return (
+      Number($('floorSelect').value) - 1
+    ) *
       D.rules.stagesPerFloor +
       Number($('stageSelect').value);
   }
@@ -1794,15 +2451,24 @@
 
     const names = encounterIds(index).map((id) => {
       const definition = enemies.get(id);
-      return info.boss ? definition.bossName : definition.name;
+
+      if (!definition) {
+        throw new Error('敵定義がありません：' + id);
+      }
+
+      return info.boss
+        ? definition.bossName
+        : definition.name;
     });
 
     const reward = rewardFor(index);
 
     $('encounterPreview').textContent =
       names.join(' / ') +
-      '｜EXP ' + number(reward.exp) +
-      '｜COIN ' + number(reward.coins);
+      '｜EXP ' +
+      number(reward.exp) +
+      '｜COIN ' +
+      number(reward.coins);
   }
 
   function exportSave() {
@@ -1811,14 +2477,19 @@
     }
 
     const blob = new Blob(
-      [JSON.stringify(save, null, 2)],
-      { type: 'application/json' }
+      [
+        JSON.stringify(save, null, 2)
+      ],
+      {
+        type: 'application/json'
+      }
     );
 
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
 
     link.href = url;
+
     link.download =
       'towerquest-rank3-' +
       new Date().toISOString().slice(0, 10) +
@@ -1828,11 +2499,13 @@
     link.click();
     link.remove();
 
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 1000);
   }
 
   async function importSave(file) {
-    if (!file || fatal) {
+    if (!file || fatal || busy) {
       return;
     }
 
@@ -1841,7 +2514,8 @@
         throw new Error('ファイルが大きすぎます。');
       }
 
-      const raw = JSON.parse(await file.text());
+      const text = await file.text();
+      const raw = JSON.parse(text);
       const result = normalizeSave(raw);
       const imported = result.value;
 
@@ -1850,7 +2524,9 @@
         '必要なら先にバックアップしてください。',
         '',
         'コイン：' + number(imported.coins),
-        '突破済み：' + imported.highestCleared + 'ステージ',
+        '突破済み：' +
+          imported.highestCleared +
+          'ステージ',
         result.migrated
           ? '旧ランク1→新1、旧2・3→新2、旧4・5→新3へ移行します。'
           : '新ランク仕様のセーブです。',
@@ -1861,7 +2537,7 @@
         '読み込みますか？'
       ].join('\n');
 
-      if (!confirm(message)) {
+      if (!window.confirm(message)) {
         return;
       }
 
@@ -1870,82 +2546,122 @@
         selectedEnemy = 0;
       });
     } catch (error) {
-      status('読み込みエラー：' + error.message);
+      status(
+        '読み込みエラー：' +
+        error.message
+      );
     } finally {
       $('saveFile').value = '';
     }
   }
 
-  $('openManagement').onclick = () => {
-    renderManagement();
-    $('management').showModal();
-  };
+  function bindEvents() {
+    $('openManagement').onclick = () => {
+      if (fatal || busy || !save) {
+        return;
+      }
 
-  $('closeManagement').onclick = () => {
-    $('management').close();
-  };
+      renderManagement();
+      $('management').showModal();
+    };
 
-  $('floorSelect').onchange = populateStages;
-  $('stageSelect').onchange = renderPreview;
-
-  $('startSelected').onclick = () => {
-    const index = selectedStageIndex();
-    const success = transact(() => startBattle(index));
-
-    if (success) {
+    $('closeManagement').onclick = () => {
       $('management').close();
-    }
-  };
+    };
 
-  $('retreat').onclick = () => {
-    if (!confirm('撤退しますか？ この戦闘の報酬は獲得できません。')) {
-      return;
-    }
+    $('floorSelect').onchange = () => {
+      if (!fatal) {
+        populateStages();
+      }
+    };
 
-    transact(() => {
-      save.battle = null;
+    $('stageSelect').onchange = () => {
+      if (!fatal) {
+        renderPreview();
+      }
+    };
+
+    $('startSelected').onclick = () => {
+      const index = selectedStageIndex();
+
+      const success = transact(() => {
+        startBattle(index);
+      });
+
+      if (success) {
+        $('management').close();
+      }
+    };
+
+    $('retreat').onclick = () => {
+      if (
+        !isActive() ||
+        !window.confirm(
+          '撤退しますか？ この戦闘の報酬は獲得できません。'
+        )
+      ) {
+        return;
+      }
+
+      transact(() => {
+        save.battle = null;
+      });
+    };
+
+    $('attack').onclick = () => {
+      transact(() => {
+        performAction('attack');
+      });
+    };
+
+    $('defend').onclick = () => {
+      transact(() => {
+        performAction('defend');
+      });
+    };
+
+    $('cancelHeal').onclick = () => {
+      if (fatal || busy) {
+        return;
+      }
+
+      pendingHeal = null;
+      renderParty();
+      renderCommands();
+    };
+
+    $('exportSave').onclick = exportSave;
+
+    $('importSave').onclick = () => {
+      if (!fatal && !busy) {
+        $('saveFile').click();
+      }
+    };
+
+    $('saveFile').onchange = (event) => {
+      importSave(event.target.files[0]);
+    };
+
+    window.addEventListener('storage', (event) => {
+      if (
+        event.key !== SAVE_KEY &&
+        event.key !== null
+      ) {
+        return;
+      }
+
+      fatal = true;
+
+      document.querySelectorAll('button').forEach((button) => {
+        button.disabled = true;
+      });
+
+      status(
+        '別タブでセーブが変更されました。このページを再読み込みしてください。'
+      );
     });
-  };
+  }
 
-  $('attack').onclick = () => {
-    transact(() => performAction('attack'));
-  };
-
-  $('defend').onclick = () => {
-    transact(() => performAction('defend'));
-  };
-
-  $('cancelHeal').onclick = () => {
-    pendingHeal = null;
-    renderParty();
-    renderCommands();
-  };
-
-  $('exportSave').onclick = exportSave;
-
-  $('importSave').onclick = () => {
-    $('saveFile').click();
-  };
-
-  $('saveFile').onchange = (event) => {
-    importSave(event.target.files[0]);
-  };
-
-  // 複数タブでの同時プレイは非対応。
-  // 別タブの更新を検知したら操作を停止する。
-  window.addEventListener('storage', (event) => {
-    if (event.key !== SAVE_KEY) {
-      return;
-    }
-
-    fatal = true;
-
-    document.querySelectorAll('button').forEach((button) => {
-      button.disabled = true;
-    });
-
-    status('別タブでセーブが変更されました。このページを再読み込みしてください。');
-  });
-
+  bindEvents();
   boot();
 })();
