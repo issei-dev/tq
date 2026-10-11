@@ -313,8 +313,8 @@ window.TQ_DATA = {
       name: 'スパークスライム',
       bossName: 'スパークキング',
       element: 'thunder',
-      image: './assets/enemies/e001.PNG',
-      bossImage: './assets/enemies/e001.PNG',
+      image: './assets/enemies/e001.png',
+      bossImage: './assets/enemies/e001.png',
       hpRate: 0.85,
       atkRate: 0.75,
       defRate: 0.6
@@ -324,8 +324,8 @@ window.TQ_DATA = {
       name: 'ボルトバット',
       bossName: 'ボルトウィング',
       element: 'thunder',
-      image: './assets/enemies/e002.PNG',
-      bossImage: './assets/enemies/e002.PNG',
+      image: './assets/enemies/e002.png',
+      bossImage: './assets/enemies/e002.png',
       hpRate: 0.8,
       atkRate: 1.2,
       defRate: 0.65
@@ -335,8 +335,8 @@ window.TQ_DATA = {
       name: 'ギアパペット',
       bossName: 'ギアコマンダー',
       element: 'thunder',
-      image: './assets/enemies/e003.PNG',
-      bossImage: './assets/enemies/e003.PNG',
+      image: './assets/enemies/e003.png',
+      bossImage: './assets/enemies/e003.png',
       hpRate: 1,
       atkRate: 1,
       defRate: 1
@@ -346,8 +346,8 @@ window.TQ_DATA = {
       name: 'ストーンガード',
       bossName: 'ストーンセンチネル',
       element: 'thunder',
-      image: './assets/enemies/e004.PNG',
-      bossImage: './assets/enemies/e004.PNG',
+      image: './assets/enemies/e004.png',
+      bossImage: './assets/enemies/e004.png',
       hpRate: 1.2,
       atkRate: 0.85,
       defRate: 1.6
