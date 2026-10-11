@@ -641,3 +641,187 @@ select {
     padding-left: 4px;
   }
 }
+/* File: style.css */
+
+/* ========================================
+   戦闘演出
+   ======================================== */
+
+/* キャラの移動演出が重なったときの表示順。 */
+.enemy.is-performing,
+.character.is-performing {
+  z-index: 8;
+}
+
+/* エフェクトはレイアウトを変えない絶対配置。 */
+.battle-effect {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.effect-ring {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  width: 56%;
+  aspect-ratio: 1 / 1;
+  border: 3px solid var(--effect-color);
+  border-radius: 50%;
+  box-shadow:
+    0 0 12px var(--effect-color),
+    inset 0 0 10px var(--effect-color);
+  transform: translate(-50%, -50%);
+}
+
+.effect-core {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  width: 24%;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  background: var(--effect-color);
+  box-shadow: 0 0 20px var(--effect-color);
+  transform: translate(-50%, -50%);
+}
+
+.effect-particle {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--effect-color);
+  box-shadow: 0 0 8px var(--effect-color);
+}
+
+/* 炎：細長い火の粒。 */
+.effect-fire .effect-particle {
+  width: 9px;
+  height: 18px;
+  border-radius: 70% 30% 65% 35%;
+}
+
+/* 水：雫形の粒。 */
+.effect-water .effect-particle {
+  width: 10px;
+  height: 14px;
+  border-radius: 65% 35% 65% 35%;
+}
+
+/* 雷：稲妻。 */
+.effect-thunder .effect-core {
+  width: 30%;
+  height: 65%;
+  border-radius: 0;
+  clip-path: polygon(
+    58% 0,
+    15% 54%,
+    47% 54%,
+    32% 100%,
+    88% 38%,
+    56% 38%
+  );
+}
+
+/* 光：星形。 */
+.effect-light .effect-particle {
+  width: 14px;
+  height: 14px;
+  border-radius: 0;
+  clip-path: polygon(
+    50% 0,
+    62% 38%,
+    100% 50%,
+    62% 62%,
+    50% 100%,
+    38% 62%,
+    0 50%,
+    38% 38%
+  );
+}
+
+/* 闇：暗色の中心と紫の輪。 */
+.effect-dark .effect-core {
+  background: #221333;
+  box-shadow:
+    0 0 12px var(--effect-color),
+    0 0 25px #603ca3;
+}
+
+/* 回復：十字の光。 */
+.effect-heal .effect-particle {
+  width: 14px;
+  height: 14px;
+  border-radius: 0;
+  clip-path: polygon(
+    35% 0,
+    65% 0,
+    65% 35%,
+    100% 35%,
+    100% 65%,
+    65% 65%,
+    65% 100%,
+    35% 100%,
+    35% 65%,
+    0 65%,
+    0 35%,
+    35% 35%
+  );
+}
+
+/* 強化：二重の防護輪。 */
+.effect-enhance .effect-ring {
+  border-style: double;
+  border-width: 5px;
+}
+
+/* 通常攻撃：短い斬撃光。 */
+.effect-strike .effect-core {
+  width: 75%;
+  height: 5px;
+  border-radius: 4px;
+  transform: translate(-50%, -50%) rotate(-35deg);
+}
+
+/* ダメージ・回復数値。 */
+.battle-number {
+  position: absolute;
+  top: 27%;
+  left: 50%;
+  z-index: 20;
+  color: #fff2d0;
+  font-size: clamp(16px, 4vw, 24px);
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow:
+    0 2px 3px #000,
+    1px 0 #000,
+    -1px 0 #000;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.battle-number.healing {
+  color: #a0ffcb;
+}
+
+/* 演出中の操作ロック。 */
+.app.is-animating button {
+  cursor: wait;
+}
+
+.app.is-animating .enemy:disabled,
+.app.is-animating .character:disabled {
+  opacity: 1;
+}
+
+.app.is-animating .enemy.dead,
+.app.is-animating .character.dead {
+  opacity: 0.35;
+}
