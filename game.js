@@ -1883,7 +1883,588 @@ async function transact(action) {
       $('saveFile').value = '';
     }
   }
+// File: game.js
 
+/* ========================================
+   戦闘演出キュー
+   ======================================== */
+
+const battleFxQueue = [];
+
+let enemyFxActors = null;
+
+function setBattleInputLocked(locked) {
+  const app = document.querySelector('.app');
+
+  if (app) {
+    app.classList.toggle('is-animating', locked);
+    app.setAttribute('aria-busy', String(locked));
+  }
+
+  if (locked || fatal) {
+    document.querySelectorAll('button').forEach((button) => {
+      button.disabled = true;
+    });
+  }
+
+  // ロック解除時のボタン状態はrender()で復元する。
+}
+
+function queueBattleFx(event) {
+  battleFxQueue.push(event);
+}
+
+function fxTarget(side, index) {
+  const root = side === 'ally'
+    ? $('party')
+    : $('enemies');
+
+  return root.children[index] || null;
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia(
+    '(prefers-reduced-motion: reduce)'
+  ).matches;
+}
+
+async function animateElement(element, frames, duration) {
+  if (!element || typeof element.animate !== 'function') {
+    return;
+  }
+
+  const animation = element.animate(frames, {
+    duration: prefersReducedMotion()
+      ? Math.min(duration, 100)
+      : duration,
+    easing: 'ease-out',
+    fill: 'none'
+  });
+
+  try {
+    await animation.finished;
+  } catch (error) {
+    // タブ切り替えなどで演出が中断されても進行は維持する。
+  } finally {
+    animation.cancel();
+  }
+}
+
+async function animateAttackMove(element) {
+  if (!element) {
+    return;
+  }
+
+  element.classList.add('is-performing');
+
+  try {
+    const distance = prefersReducedMotion() ? 0 : 36;
+
+    await animateElement(
+      element,
+      [
+        { transform: 'translateY(0)' },
+        {
+          transform: 'translateY(-' + distance + 'px)',
+          offset: 0.45
+        },
+        { transform: 'translateY(0)' }
+      ],
+      300
+    );
+  } finally {
+    element.classList.remove('is-performing');
+  }
+}
+
+async function animateShake(element) {
+  if (!element) {
+    return;
+  }
+
+  const distance = prefersReducedMotion() ? 0 : 6;
+
+  await animateElement(
+    element,
+    [
+      { transform: 'translateX(0)' },
+      { transform: 'translateX(-' + distance + 'px)' },
+      { transform: 'translateX(' + distance + 'px)' },
+      { transform: 'translateX(-' + distance + 'px)' },
+      { transform: 'translateX(' + distance + 'px)' },
+      { transform: 'translateX(0)' }
+    ],
+    240
+  );
+}
+
+async function showBattleNumber(element, amount, healing) {
+  if (!element) {
+    return;
+  }
+
+  const label = node(
+    'div',
+    'battle-number' + (healing ? ' healing' : ''),
+    (healing ? '+' : '') + number(amount)
+  );
+
+  element.append(label);
+
+  try {
+    await animateElement(
+      label,
+      [
+        {
+          opacity: 0,
+          transform: 'translate(-50%, 8px)'
+        },
+        {
+          opacity: 1,
+          transform: 'translate(-50%, -4px)',
+          offset: 0.25
+        },
+        {
+          opacity: 0,
+          transform: 'translate(-50%, -30px)'
+        }
+      ],
+      450
+    );
+  } finally {
+    label.remove();
+  }
+}
+
+async function showAttributeEffect(element, elementId, mode) {
+  if (!element) {
+    return;
+  }
+
+  const color = mode === 'heal'
+    ? '#86efb7'
+    : D.elements[elementId]?.color || '#ffffff';
+
+  const effect = node(
+    'div',
+    'battle-effect effect-' + elementId + ' effect-' + mode
+  );
+
+  effect.style.setProperty('--effect-color', color);
+
+  const ring = node('div', 'effect-ring');
+  const core = node('div', 'effect-core');
+
+  effect.append(ring, core);
+  element.append(effect);
+
+  const animations = [];
+
+  animations.push(
+    animateElement(
+      ring,
+      [
+        {
+          opacity: 0,
+          transform: 'translate(-50%, -50%) scale(0.35)'
+        },
+        {
+          opacity: 0.95,
+          transform: 'translate(-50%, -50%) scale(0.85)',
+          offset: 0.35
+        },
+        {
+          opacity: 0,
+          transform: 'translate(-50%, -50%) scale(1.45)'
+        }
+      ],
+      380
+    )
+  );
+
+  const baseTransform = mode === 'strike'
+    ? 'translate(-50%, -50%) rotate(-35deg)'
+    : 'translate(-50%, -50%)';
+
+  animations.push(
+    animateElement(
+      core,
+      [
+        {
+          opacity: 0,
+          transform: baseTransform + ' scale(0.5)'
+        },
+        {
+          opacity: 0.85,
+          transform: baseTransform + ' scale(1)',
+          offset: 0.35
+        },
+        {
+          opacity: 0,
+          transform: baseTransform + ' scale(1.3)'
+        }
+      ],
+      320
+    )
+  );
+
+  const count = prefersReducedMotion() ? 4 : 8;
+
+  for (let i = 0; i < count; i += 1) {
+    const particle = node('div', 'effect-particle');
+    effect.append(particle);
+
+    const angle = Math.PI * 2 * i / count;
+    const distance = mode === 'heal' ? 28 : 38;
+    const x = Math.cos(angle) * distance;
+    const y = mode === 'heal'
+      ? -20 - Math.abs(Math.sin(angle) * distance)
+      : Math.sin(angle) * distance;
+
+    animations.push(
+      animateElement(
+        particle,
+        [
+          {
+            opacity: 0,
+            transform: 'translate(-50%, -50%) scale(0.3)'
+          },
+          {
+            opacity: 1,
+            offset: 0.2
+          },
+          {
+            opacity: 0,
+            transform:
+              'translate(calc(-50% + ' + x + 'px), ' +
+              'calc(-50% + ' + y + 'px)) scale(0.8)'
+          }
+        ],
+        420
+      )
+    );
+  }
+
+  try {
+    await Promise.all(animations);
+  } finally {
+    effect.remove();
+  }
+}
+
+async function playBattleFxQueue() {
+  for (const event of battleFxQueue) {
+    if (fatal) {
+      break;
+    }
+
+    const target = fxTarget(event.side, event.index);
+
+    if (event.kind === 'move') {
+      await animateAttackMove(target);
+      continue;
+    }
+
+    if (event.kind === 'cast') {
+      await showAttributeEffect(
+        target,
+        event.element,
+        'enhance'
+      );
+      continue;
+    }
+
+    if (event.kind === 'damage') {
+      await Promise.all([
+        animateShake(target),
+        showBattleNumber(target, event.amount, false),
+        showAttributeEffect(
+          target,
+          event.element,
+          event.skill ? 'attack' : 'strike'
+        )
+      ]);
+
+      continue;
+    }
+
+    if (event.kind === 'heal') {
+      await Promise.all([
+        showBattleNumber(target, event.amount, true),
+        showAttributeEffect(target, event.element, 'heal')
+      ]);
+
+      continue;
+    }
+
+    if (event.kind === 'enhance') {
+      await showAttributeEffect(
+        target,
+        event.element,
+        'enhance'
+      );
+
+      continue;
+    }
+
+    if (event.kind === 'debuff') {
+      await showAttributeEffect(
+        target,
+        event.element,
+        'attack'
+      );
+    }
+  }
+}
+
+/* ========================================
+   既存の戦闘処理に演出イベントを追加
+   ======================================== */
+
+let activeSkillFx = false;
+
+const performActionWithoutFx = performAction;
+
+performAction = function (command, slot, allyIndex) {
+  if (
+    command === 'attack' &&
+    isActive()
+  ) {
+    queueBattleFx({
+      kind: 'move',
+      side: 'ally',
+      index: save.battle.actor
+    });
+  }
+
+  return performActionWithoutFx(command, slot, allyIndex);
+};
+
+const hitEnemyWithoutFx = hitEnemy;
+
+hitEnemy = function (
+  actor,
+  enemy,
+  power,
+  defenseScale = 1,
+  modifier = 1
+) {
+  if (!enemy || enemy.hp <= 0) {
+    return hitEnemyWithoutFx(
+      actor,
+      enemy,
+      power,
+      defenseScale,
+      modifier
+    );
+  }
+
+  const definition = characters.get(actor.id);
+  const index = save.battle.enemies.indexOf(enemy);
+  const before = enemy.hp;
+  const mark = enemy.mark;
+
+  // ダメージ数値は、HPを超えた分も含めて表示する。
+  const base = Math.max(
+    1,
+    actor.atk * power - enemy.def * defenseScale / 2
+  );
+
+  const amount = Math.max(
+    1,
+    Math.floor(
+      base *
+      elementRate(definition.element, enemy.element) *
+      modifier *
+      mark
+    )
+  );
+
+  const result = hitEnemyWithoutFx(
+    actor,
+    enemy,
+    power,
+    defenseScale,
+    modifier
+  );
+
+  if (enemy.hp < before) {
+    queueBattleFx({
+      kind: 'damage',
+      side: 'enemy',
+      index,
+      element: definition.element,
+      amount,
+      skill: activeSkillFx
+    });
+  }
+
+  return result;
+};
+
+const useSkillWithoutFx = useSkill;
+
+useSkill = function (actor, slot, allyIndex) {
+  const definition = characters.get(actor.id);
+  const skill = skillFor(
+    definition.skills[slot],
+    actor.rank
+  );
+
+  const actorIndex = save.battle.allies.indexOf(actor);
+  const target = targetEnemy();
+  const targetIndex = save.battle.enemies.indexOf(target);
+
+  queueBattleFx({
+    kind: 'cast',
+    side: 'ally',
+    index: actorIndex,
+    element: definition.element
+  });
+
+  const healTarget = skill.type === 'heal'
+    ? save.battle.allies[allyIndex]
+    : null;
+
+  const previousHp = healTarget?.hp ?? 0;
+  const previousSkillFx = activeSkillFx;
+
+  let result;
+
+  activeSkillFx = true;
+
+  try {
+    result = useSkillWithoutFx(actor, slot, allyIndex);
+  } finally {
+    activeSkillFx = previousSkillFx;
+  }
+
+  if (skill.type === 'heal') {
+    queueBattleFx({
+      kind: 'heal',
+      side: 'ally',
+      index: allyIndex,
+      element: definition.element,
+      amount: healTarget.hp - previousHp
+    });
+  } else if (
+    skill.type === 'buff' ||
+    skill.type === 'cover'
+  ) {
+    queueBattleFx({
+      kind: 'enhance',
+      side: 'ally',
+      index: actorIndex,
+      element: definition.element
+    });
+  } else if (skill.type === 'weaken') {
+    save.battle.enemies.forEach((enemy, index) => {
+      if (enemy.hp > 0) {
+        queueBattleFx({
+          kind: 'debuff',
+          side: 'enemy',
+          index,
+          element: definition.element
+        });
+      }
+    });
+  } else if (skill.type === 'mark') {
+    queueBattleFx({
+      kind: 'debuff',
+      side: 'enemy',
+      index: targetIndex,
+      element: definition.element
+    });
+  }
+
+  return result;
+};
+
+const enemyPhaseWithoutFx = enemyPhase;
+
+enemyPhase = function () {
+  enemyFxActors = new Set();
+
+  try {
+    return enemyPhaseWithoutFx();
+  } finally {
+    enemyFxActors = null;
+  }
+};
+
+const damageAllyWithoutFx = damageAlly;
+
+damageAlly = function (
+  enemy,
+  target,
+  power,
+  enraged,
+  single
+) {
+  const enemyIndex = save.battle.enemies.indexOf(enemy);
+  const allyIndex = save.battle.allies.indexOf(target);
+
+  // 全体攻撃でも、同じ敵の移動は1回だけにする。
+  if (
+    enemyFxActors &&
+    !enemyFxActors.has(enemyIndex)
+  ) {
+    enemyFxActors.add(enemyIndex);
+
+    queueBattleFx({
+      kind: 'move',
+      side: 'enemy',
+      index: enemyIndex
+    });
+  }
+
+  const definition = characters.get(target.id);
+  const before = target.hp;
+
+  const base = Math.max(
+    1,
+    enemy.atk *
+    enemy.weaken *
+    power *
+    (enraged ? 1.15 : 1) -
+    target.def / 2
+  );
+
+  const coverRate = single && target.cover
+    ? 1 - target.coverReduction
+    : 1;
+
+  const amount = Math.max(
+    1,
+    Math.floor(
+      base *
+      elementRate(enemy.element, definition.element) *
+      (target.defense ? 0.5 : 1) *
+      coverRate
+    )
+  );
+
+  const result = damageAllyWithoutFx(
+    enemy,
+    target,
+    power,
+    enraged,
+    single
+  );
+
+  if (target.hp < before) {
+    queueBattleFx({
+      kind: 'damage',
+      side: 'ally',
+      index: allyIndex,
+      element: enemy.element,
+      amount,
+      skill: power !== 1
+    });
+  }
+
+  return result;
+};
   function bindEvents() {
     $('openManagement').onclick = () => {
       if (!fatal && !busy && save) {
