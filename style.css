@@ -979,3 +979,59 @@ select {
     grid-template-columns: 1fr;
   }
 }
+/* File: style.css */
+
+.spirit-upgrade-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.spirit-upgrade-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line, #334155);
+  border-radius: 12px;
+  background: #101725;
+  overflow-wrap: anywhere;
+}
+
+.spirit-upgrade-image {
+  display: block;
+  width: 100%;
+  max-width: 140px;
+  aspect-ratio: 2 / 3;
+  margin: 0 auto 10px;
+  object-fit: contain;
+}
+
+.spirit-upgrade-card strong {
+  display: block;
+  font-size: 13px;
+}
+
+.spirit-upgrade-card p {
+  margin: 8px 0;
+}
+
+.spirit-upgrade-card button {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.spirit-upgrade-max,
+.spirit-upgrade-notice {
+  color: var(--gold, #e8c76a);
+  font-size: 12px;
+}
+
+.spirit-upgrade-notice:empty {
+  display: none;
+}
+
+@media (max-width: 360px) {
+  .spirit-upgrade-grid {
+    grid-template-columns: 1fr;
+  }
+}
