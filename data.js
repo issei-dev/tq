@@ -79,8 +79,8 @@ window.TQ_DATA = {
       ],
       portraits: [
         './assets/characters/leon_r1.png',
-        './assets/characters/leon_r3.PNG',
-        './assets/characters/leon_r5.PNG'
+        './assets/characters/leon_r3.png',
+        './assets/characters/leon_r5.png'
       ],
       skills: [
         'flame_edge',
@@ -102,8 +102,8 @@ window.TQ_DATA = {
       ],
       portraits: [
         './assets/characters/serena_r1.png',
-        './assets/characters/serena_r3.PNG',
-        './assets/characters/serena_r5.PNG'
+        './assets/characters/serena_r3.png',
+        './assets/characters/serena_r5.png'
       ],
       skills: [
         'aqua_lance',
@@ -125,8 +125,8 @@ window.TQ_DATA = {
       ],
       portraits: [
         './assets/characters/rizel_r1.png',
-        './assets/characters/rizel_r3.PNG',
-        './assets/characters/rizel_r5.PNG'
+        './assets/characters/rizel_r3.png',
+        './assets/characters/rizel_r5.png'
       ],
       skills: [
         'bolt_rush',
@@ -148,8 +148,8 @@ window.TQ_DATA = {
       ],
       portraits: [
         './assets/characters/lumina_r1.png',
-        './assets/characters/lumina_r3.PNG',
-        './assets/characters/lumina_r5.PNG'
+        './assets/characters/lumina_r3.png',
+        './assets/characters/lumina_r5.png'
       ],
       skills: [
         'ray_shot',
@@ -357,8 +357,8 @@ window.TQ_DATA = {
       name: 'アイアンゴーレム',
       bossName: 'アイアンゴーレム',
       element: 'thunder',
-      image: './assets/enemies/b001.PNG',
-      bossImage: './assets/enemies/b001.PNG',
+      image: './assets/enemies/b001.png',
+      bossImage: './assets/enemies/b001.png',
       hpRate: 1,
       atkRate: 1,
       defRate: 1.25
