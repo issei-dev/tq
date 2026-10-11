@@ -162,7 +162,7 @@
       id: bossId,
       name: floor.bossName,
       element: floor.element,
-      image: './assets/enemies/' + bossId + '.PNG',
+      image: './assets/enemies/' + bossId + '.png',
       hpRate: 1,
       atkRate: 1,
       defRate: 1.25
@@ -173,7 +173,7 @@
       to: floor.floor * 10,
       name: floor.name,
       element: floor.element,
-      background: './assets/backgrounds/' + backgroundId + '.PNG',
+      background: './assets/backgrounds/' + backgroundId + '.png',
       backgroundPosition: 'center 58%'
     });
 
@@ -192,7 +192,7 @@
     to: 100,
     name: '魔界・塔の頂',
     element: 'dark',
-    background: './assets/backgrounds/s010.PNG',
+    background: './assets/backgrounds/s010.png',
     backgroundPosition: 'center 58%'
   });
 
@@ -256,9 +256,9 @@
           'フェニックスロード'
         ],
         portraits: [
-          './assets/characters/leon_r1.webp',
-          './assets/characters/leon_r3.webp',
-          './assets/characters/leon_r5.webp'
+          './assets/characters/leon_r1.png',
+          './assets/characters/leon_r3.png',
+          './assets/characters/leon_r5.png'
         ],
         skills: [
           'flame_edge',
@@ -278,9 +278,9 @@
           'オーシャンエンプレス'
         ],
         portraits: [
-          './assets/characters/serena_r1.webp',
-          './assets/characters/serena_r3.webp',
-          './assets/characters/serena_r5.webp'
+          './assets/characters/serena_r1.png',
+          './assets/characters/serena_r3.png',
+          './assets/characters/serena_r5.png'
         ],
         skills: [
           'aqua_lance',
@@ -300,9 +300,9 @@
           'ライトニングヴァルキリー'
         ],
         portraits: [
-          './assets/characters/rizel_r1.webp',
-          './assets/characters/rizel_r3.webp',
-          './assets/characters/rizel_r5.webp'
+          './assets/characters/rizel_r1.png',
+          './assets/characters/rizel_r3.png',
+          './assets/characters/rizel_r5.png'
         ],
         skills: [
           'bolt_rush',
@@ -322,9 +322,9 @@
           'アストラルセラフ'
         ],
         portraits: [
-          './assets/characters/lumina_r1.webp',
-          './assets/characters/lumina_r3.webp',
-          './assets/characters/lumina_r5.webp'
+          './assets/characters/lumina_r1.png',
+          './assets/characters/lumina_r3.png',
+          './assets/characters/lumina_r5.png'
         ],
         skills: [
           'ray_shot',
